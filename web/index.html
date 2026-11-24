@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src https://script.google.com https://script.googleusercontent.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+  <meta name="theme-color" content="#14231c">
+  <title>Velas POS</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css?v=1">
+</head>
+<body>
+  <!-- LOGIN -->
+  <section id="login" class="login hidden" aria-label="Ingreso">
+    <div class="login-card">
+      <div class="flame" aria-hidden="true"></div>
+      <h1 id="storeName">Velas de Navidad</h1>
+      <p class="muted">Punto de venta</p>
+      <label class="field">
+        <span>Correo</span>
+        <input id="email" type="email" inputmode="email" autocomplete="username" placeholder="tucorreo@gmail.com">
+      </label>
+      <div class="field">
+        <span>PIN de 4 dígitos</span>
+        <div class="pin-dots" id="pinDots" aria-live="polite"><i></i><i></i><i></i><i></i></div>
+      </div>
+      <div class="keypad" id="keypad">
+        <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+        <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+        <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+        <button data-k="clear" class="ghost" aria-label="Borrar todo">C</button>
+        <button data-k="0">0</button>
+        <button data-k="back" class="ghost" aria-label="Borrar">⌫</button>
+      </div>
+      <p id="loginMsg" class="error" role="alert"></p>
+    </div>
+  </section>
+
+  <!-- APP -->
+  <div id="app" class="hidden">
+    <header class="topbar">
+      <div>
+        <strong id="hdrStore">Velas de Navidad</strong>
+        <small id="hdrUser" class="muted"></small>
+      </div>
+      <button id="btnRefresh" class="icon-btn" aria-label="Actualizar">⟳</button>
+    </header>
+
+    <div id="lowStock" class="alert hidden" role="status"></div>
+
+    <main>
+      <!-- VENDER -->
+      <section id="view-sell" class="view">
+        <div id="productGrid" class="grid"></div>
+
+        <div class="checkout card">
+          <h2>Venta actual</h2>
+          <div id="cartLines" class="cart-lines"><p class="muted">Toca un producto para agregarlo.</p></div>
+          <div class="field">
+            <span>Pago</span>
+            <div id="payMethods" class="chips"></div>
+          </div>
+          <label class="field">
+            <span>Cliente (opcional)</span>
+            <input id="cliente" type="text" maxlength="80" autocomplete="off" placeholder="Nombre o celular">
+          </label>
+          <button id="btnCharge" class="primary big" disabled>Cobrar $0</button>
+        </div>
+      </section>
+
+      <!-- INFORMES -->
+      <section id="view-report" class="view hidden">
+        <div class="seg" id="reportScope">
+          <button data-s="hoy" class="on">Hoy</button>
+          <button data-s="semana">Semana</button>
+          <button data-s="total">Total</button>
+        </div>
+        <div id="reportBody"><p class="muted center">Cargando…</p></div>
+      </section>
+
+      <!-- PRODUCTOS -->
+      <section id="view-products" class="view hidden">
+        <div id="productAdmin"></div>
+        <button id="btnNewProduct" class="secondary big">+ Agregar producto</button>
+      </section>
+
+      <!-- CUENTA -->
+      <section id="view-account" class="view hidden">
+        <div class="card">
+          <h2>Mi cuenta</h2>
+          <p id="accInfo" class="muted"></p>
+          <label class="field"><span>PIN actual</span>
+            <input id="pinOld" type="password" inputmode="numeric" maxlength="4" pattern="\d{4}" autocomplete="current-password"></label>
+          <label class="field"><span>PIN nuevo</span>
+            <input id="pinNew" type="password" inputmode="numeric" maxlength="4" pattern="\d{4}" autocomplete="new-password"></label>
+          <button id="btnPin" class="secondary">Cambiar PIN</button>
+        </div>
+        <div class="card">
+          <button id="btnInstall" class="secondary hidden">📲 Instalar en este celular</button>
+          <p class="muted small">En Chrome: menú ⋮ → “Agregar a la pantalla principal” o “Instalar app”.</p>
+          <button id="btnLogout" class="danger">Cerrar sesión</button>
+        </div>
+      </section>
+    </main>
+
+    <nav class="tabs">
+      <button data-v="sell" class="on"><span>🕯️</span>Vender</button>
+      <button data-v="report"><span>📊</span>Informes</button>
+      <button data-v="products"><span>📦</span>Productos</button>
+      <button data-v="account"><span>👤</span>Cuenta</button>
+    </nav>
+  </div>
+
+  <!-- DIÁLOGO -->
+  <div id="sheet" class="sheet hidden" role="dialog" aria-modal="true">
+    <div class="sheet-card">
+      <h2 id="sheetTitle"></h2>
+      <div id="sheetBody"></div>
+      <div class="row">
+        <button id="sheetCancel" class="ghost">Cancelar</button>
+        <button id="sheetOk" class="primary">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden" role="status"></div>
+  <div id="busy" class="busy hidden"><div class="spinner"></div></div>
+
+  <script src="config.js?v=1"></script>
+  <script src="app.js?v=1"></script>
+</body>
+</html>
