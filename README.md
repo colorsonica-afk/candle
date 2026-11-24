@@ -3,7 +3,7 @@
 Punto de venta para celular (PWA instalable desde Chrome) para vender velas de Navidad.
 
 - **Usuarias:** 3, todas con rol `admin` (venden, cambian precios, agregan productos y ajustan inventario).
-- **Acceso:** correo + PIN de 4 dígitos, validado en el servidor. 5 intentos fallidos bloquean 15 min. La sesión se cierra tras 6 h sin uso.
+- **Acceso:** correo + PIN de 4 dígitos, validado en el servidor, **una sola vez por celular**: la sesión queda abierta aunque se cierre la app o se apague el teléfono, y sin internet abre con los últimos datos guardados. Se cierra solo con “Cerrar sesión”, poniendo `activo` en FALSE en la hoja, o tras un año sin uso. 5 intentos fallidos bloquean 15 min.
 - **Datos:** una hoja de Google Sheets (pestañas `usuarios`, `productos`, `ventas`, `movimientos`, `accesos`).
 - **API:** Google Apps Script pegado en esa hoja (`apps-script/Code.gs`).
 - **App:** archivos estáticos en `web/` (se pueden publicar en GitHub Pages o en cualquier hosting HTTPS).
@@ -48,4 +48,5 @@ Abrir el enlace en Chrome → menú ⋮ → **Instalar app** / “Agregar a la p
 ```
 cd test && node backend.test.js   # API completa contra un emulador de Apps Script
 node e2e.js /tmp                  # recorrido en navegador móvil (requiere Playwright)
+node persist.js                   # sesión permanente: reabrir, sin internet, cerrar sesión
 ```

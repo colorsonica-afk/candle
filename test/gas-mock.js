@@ -35,7 +35,7 @@ function load() {
   const ctx = {
     console, Math, JSON, Date, String, Number, Object, Array, Error, isFinite, RegExp,
     SpreadsheetApp: { getActiveSpreadsheet: () => ss },
-    PropertiesService: { getScriptProperties: () => ({ getProperty: k => props.get(k) || null, setProperty: (k, v) => props.set(k, v) }) },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: k => props.get(k) || null, setProperty: (k, v) => props.set(k, v), deleteProperty: k => props.delete(k), getProperties: () => Object.fromEntries(props) }) },
     CacheService: { getScriptCache: () => ({ get: k => cache.has(k) ? cache.get(k) : null, put: (k, v) => cache.set(k, v), remove: k => cache.delete(k) }) },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
     Utilities: {
@@ -52,6 +52,6 @@ function load() {
     .replace("// ['correo@gmail.com', 'Nombre'],", "['ana@test.co','Ana'],['bea@test.co','Bea'],['cata@test.co','Cata'],");
   vm.runInContext(code, ctx);
   const call = body => JSON.parse(ctx.doPost({ postData: { contents: JSON.stringify(body) } }).s);
-  return { ctx, sheets, mails, call };
+  return { ctx, sheets, mails, call, cache, props };
 }
 module.exports = { load };

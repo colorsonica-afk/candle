@@ -12,7 +12,8 @@
  */
 
 const TZ = 'America/Bogota';
-const SESSION_SECONDS = 21600;   // 6 h sin actividad cierra la sesión
+const SESSION_DAYS = 365;        // la sesión queda abierta en el celular; se cierra con "Cerrar sesión" o desactivando a la usuaria
+const CACHE_SECONDS = 21600;
 const MAX_FAILS = 5;             // intentos fallidos antes de bloquear
 const LOCK_SECONDS = 900;        // 15 min de bloqueo
 
@@ -107,7 +108,7 @@ function doPost(e) {
       case 'adjustStock': return json_(adjustStock_(user, req));
       case 'report': return json_(report_(user));
       case 'changePin': return json_(changePin_(user, req));
-      case 'logout': CacheService.getScriptCache().remove('s:' + req.token); return json_({ ok: true });
+      case 'logout': dropSession_(req.token); return json_({ ok: true });
       default: return json_({ ok: false, msg: 'Acción desconocida' });
     }
   } catch (err) {
@@ -170,18 +171,73 @@ function login_(req) {
   cache.remove(failKey);
   const user = { email: email, nombre: String(rows[found][1] || email), rol: String(rows[found][3] || 'vendedor').toLowerCase() };
   const token = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
-  cache.put('s:' + token, JSON.stringify(user), SESSION_SECONDS);
+  saveSession_(token, user.email);
   logAccess_(email, 'ok');
   return { ok: true, token: token, user: user };
 }
 
+/**
+ * Las sesiones se guardan de forma permanente (propiedades del script) con el token cifrado,
+ * así sobreviven a reinicios del celular y a la caché de Google. En cada uso se confirma que
+ * la usuaria siga activa en la hoja: poner "activo" en FALSE la saca de inmediato.
+ */
+function sessionKey_(token) {
+  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(token), Utilities.Charset.UTF_8);
+  return 'sess:' + bytes.map(function (b) { return ('0' + (b & 0xff).toString(16)).slice(-2); }).join('');
+}
+
+function saveSession_(token, email) {
+  const now = Date.now();
+  PropertiesService.getScriptProperties().setProperty(sessionKey_(token), JSON.stringify({ email: email, created: now, seen: now }));
+  purgeSessions_();
+}
+
+function dropSession_(token) {
+  if (!token || !/^[a-f0-9]{64}$/.test(String(token))) return;
+  const key = sessionKey_(token);
+  PropertiesService.getScriptProperties().deleteProperty(key);
+  CacheService.getScriptCache().remove(key);
+}
+
+function purgeSessions_() {
+  const props = PropertiesService.getScriptProperties();
+  const all = props.getProperties();
+  const limit = Date.now() - SESSION_DAYS * 86400000;
+  Object.keys(all).forEach(function (k) {
+    if (k.indexOf('sess:') !== 0) return;
+    try { if (JSON.parse(all[k]).seen < limit) props.deleteProperty(k); } catch (e) { props.deleteProperty(k); }
+  });
+}
+
 function auth_(token) {
   if (!token || !/^[a-f0-9]{64}$/.test(String(token))) return null;
+  const key = sessionKey_(token);
   const cache = CacheService.getScriptCache();
-  const raw = cache.get('s:' + token);
+  const props = PropertiesService.getScriptProperties();
+  let raw = cache.get(key) || props.getProperty(key);
   if (!raw) return null;
-  cache.put('s:' + token, raw, SESSION_SECONDS); // renovar por actividad
-  return JSON.parse(raw);
+  const sess = JSON.parse(raw);
+  const now = Date.now();
+  if (now - sess.seen > SESSION_DAYS * 86400000) { dropSession_(token); return null; }
+  if (now - sess.seen > 86400000) { // marcar uso como máximo una vez al día
+    sess.seen = now; raw = JSON.stringify(sess); props.setProperty(key, raw);
+  }
+  cache.put(key, raw, CACHE_SECONDS);
+  const user = activeUser_(sess.email);
+  if (!user) { dropSession_(token); return null; }
+  return user;
+}
+
+/** Datos vigentes de la usuaria (nombre y rol pueden cambiar en la hoja). null si ya no está activa. */
+function activeUser_(email) {
+  const rows = sheet_(SH.USERS).getDataRange().getValues();
+  for (let i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]).trim().toLowerCase() === email) {
+      if (!isTrue_(rows[i][4])) return null;
+      return { email: email, nombre: String(rows[i][1] || email), rol: String(rows[i][3] || 'vendedor').toLowerCase() };
+    }
+  }
+  return null;
 }
 
 function requireAdmin_(user) {

@@ -82,4 +82,14 @@ assert.match(r.msg, /Demasiados/);
 // Logout
 G.call({ action: 'logout', token: T });
 assert.strictEqual(G.call({ action: 'bootstrap', token: T }).code, 'SESSION');
+// Sesión permanente: sobrevive a que Google vacíe la caché
+const T2 = G.call({ action: 'login', email: 'ana@test.co', pin: '4321' }).token;
+G.cache.clear();
+assert.ok(G.call({ action: 'bootstrap', token: T2 }).ok, 'sesión sigue tras vaciar caché');
+assert.ok(![...G.props.keys()].some(k => k.includes(T2)), 'token no se guarda en claro');
+// Desactivar a la usuaria la saca de inmediato
+users[1][4] = false;
+assert.strictEqual(G.call({ action: 'bootstrap', token: T2 }).code, 'SESSION');
+users[1][4] = true;
+assert.strictEqual(G.call({ action: 'bootstrap', token: T2 }).code, 'SESSION', 'sesión revocada no revive');
 console.log('Backend OK — todas las pruebas pasaron');

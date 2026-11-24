@@ -117,30 +117,60 @@
   }
 
   function endSession(msg) {
-    S.token = null; S.user = null; store.del('pos_token');
+    S.token = null; S.user = null; store.del('pos_token'); store.del('pos_boot');
     showLogin(msg);
   }
 
   /* ───────────── Arranque ───────────── */
+  // La sesión queda abierta en el celular: solo se pide el PIN otra vez si el servidor
+  // la rechaza (cerrar sesión o usuaria desactivada). Sin internet se abre con lo último guardado.
+  function enterApp(r) {
+    S.user = r.user; S.products = r.products || []; S.payMethods = r.payMethods || S.payMethods;
+    if (S.payMethods.indexOf(S.metodo) < 0) S.metodo = S.payMethods[0];
+    $('#login').classList.add('hidden');
+    $('#app').classList.remove('hidden');
+    $('#hdrUser').textContent = S.user.nombre + (S.user.rol === 'admin' ? ' · admin' : '');
+    $('#accInfo').textContent = S.user.email + ' · rol ' + S.user.rol;
+    $('#btnNewProduct').classList.toggle('hidden', !isAdmin());
+    renderAll();
+    go(S.view);
+  }
+
   async function start() {
+    let cached = null;
+    try { cached = JSON.parse(store.get('pos_boot') || 'null'); } catch (e) { cached = null; }
+    if (cached && cached.user) enterApp(cached);   // abre al instante con lo último conocido
     try {
-      const r = await api('bootstrap');
-      S.user = r.user; S.products = r.products; S.payMethods = r.payMethods;
-      if (S.payMethods.indexOf(S.metodo) < 0) S.metodo = S.payMethods[0];
-      $('#login').classList.add('hidden');
-      $('#app').classList.remove('hidden');
-      $('#hdrUser').textContent = S.user.nombre + (S.user.rol === 'admin' ? ' · admin' : '');
-      $('#accInfo').textContent = S.user.email + ' · rol ' + S.user.rol;
-      $('#btnNewProduct').classList.toggle('hidden', !isAdmin());
-      renderAll();
-      go(S.view);
+      const r = await api('bootstrap', null, { quiet: !!cached });
+      store.set('pos_boot', JSON.stringify({ user: r.user, products: r.products, payMethods: r.payMethods }));
+      enterApp(r);
     } catch (e) {
-      if (!e.handled) showLogin(e.message);
+      if (e.handled) return;                        // sesión rechazada: ya se mostró el login
+      if (cached && cached.user) toast(e.message + ' Mostrando datos guardados.', true, 4000);
+      else showRetry(e.message);
+    }
+  }
+
+  function showRetry(msg) {
+    $('#app').classList.add('hidden');
+    $('#login').classList.remove('hidden');
+    $('#loginMsg').textContent = msg + ' Toca ⟳ para reintentar.';
+    if (!$('#btnRetry')) {
+      const b = document.createElement('button');
+      b.id = 'btnRetry'; b.className = 'secondary big'; b.textContent = '⟳ Reintentar';
+      b.addEventListener('click', () => { b.remove(); $('#loginMsg').textContent = ''; start(); });
+      $('#loginMsg').after(b);
     }
   }
   const isAdmin = () => S.user && S.user.rol === 'admin';
 
-  function setProducts(list) { if (list) S.products = list; renderAll(); }
+  function setProducts(list) {
+    if (list) {
+      S.products = list;
+      if (S.user) store.set('pos_boot', JSON.stringify({ user: S.user, products: list, payMethods: S.payMethods }));
+    }
+    renderAll();
+  }
   function renderAll() { renderLowStock(); renderProducts(); renderCart(); renderPayMethods(); renderProductAdmin(); }
 
   /* ───────────── Navegación ───────────── */
@@ -521,6 +551,8 @@
 
   /* ───────────── Inicio ───────────── */
   if (CFG.STORE_NAME) { $('#storeName').textContent = CFG.STORE_NAME; $('#hdrStore').textContent = CFG.STORE_NAME; }
+  // Pedir a Chrome que no borre los datos de la app (la sesión) aunque falte espacio.
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   if (S.token) start(); else showLogin();
 })();
