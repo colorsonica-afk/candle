@@ -1,0 +1,24 @@
+const { chromium, devices } = require('playwright');
+const http = require('http'), fs = require('fs'), path = require('path');
+const { load } = require('./gas-mock'); const G = load(); G.ctx.setup();
+const pin = G.sheets.usuarios.data[1][2]; const ROOT = path.join(__dirname, '../web'); const OUT = process.argv[2];
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
+const srv = http.createServer((q, s) => { let f = path.join(ROOT, q.url.split('?')[0]); if (f.endsWith('/')) f += 'index.html';
+  if (!fs.existsSync(f)) { s.writeHead(404); return s.end(); } s.writeHead(200, { 'content-type': types[path.extname(f)] }); s.end(fs.readFileSync(f)); }).listen(8768);
+(async () => {
+  const b = await chromium.launch(); const ctx = await b.newContext({ ...devices['Pixel 7'], serviceWorkers: 'block' }); const p = await ctx.newPage();
+  await p.route('**/config.js*', r => r.fulfill({ contentType: 'text/javascript', body: "window.POS_CONFIG={API_URL:'https://script.google.com/x/exec',STORE_NAME:'Velas de Navidad'};" }));
+  await p.route('https://script.google.com/**', r => r.fulfill({ contentType: 'application/json', body: JSON.stringify(G.call(JSON.parse(r.request().postData()))) }));
+  await p.goto('http://localhost:8768/'); await p.waitForTimeout(1500); await p.screenshot({ path: OUT + '/n1-login.png' });
+  await p.fill('#email', 'ana@test.co'); for (const d of pin) await p.click(`#keypad button[data-k="${d}"]`);
+  await p.waitForSelector('#app:not(.hidden)');
+  G.call({ action: 'saveProduct', token: await p.evaluate(() => localStorage.getItem('pos_token')), product: { nombre: 'Vela aroma pino', precio: 18000, stock: 12, stock_minimo: 15 } });
+  await p.click('#btnRefresh'); await p.waitForTimeout(800);
+  await p.click('.prod'); await p.click('.prod'); await p.waitForTimeout(400);
+  await p.screenshot({ path: OUT + '/n2-vender.png' });
+  await p.click('#btnCharge'); await p.click('#sheetOk'); await p.waitForTimeout(700);
+  await p.screenshot({ path: OUT + '/n3-celebra.png' });
+  await p.click('.tabs button[data-v="report"]'); await p.waitForSelector('.kpi.main'); await p.waitForTimeout(2500);
+  await p.screenshot({ path: OUT + '/n4-informe.png' });
+  await b.close(); srv.close();
+})();

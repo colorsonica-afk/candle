@@ -129,7 +129,7 @@
     if (S.payMethods.indexOf(S.metodo) < 0) S.metodo = S.payMethods[0];
     $('#login').classList.add('hidden');
     $('#app').classList.remove('hidden');
-    $('#hdrUser').textContent = S.user.nombre + (S.user.rol === 'admin' ? ' · admin' : '');
+    $('#hdrUser').textContent = '¡Hola, ' + S.user.nombre + '! ' + greetEmoji();
     $('#accInfo').textContent = S.user.email + ' · rol ' + S.user.rol;
     $('#btnNewProduct').classList.toggle('hidden', !isAdmin());
     renderAll();
@@ -163,6 +163,16 @@
     }
   }
   const isAdmin = () => S.user && S.user.rol === 'admin';
+  const PAY_EMOJI = { Efectivo: '💵', Transferencia: '🏦', Nequi: '📱', Daviplata: '📲', Tarjeta: '💳' };
+  function greetEmoji() { const h = new Date().getHours(); return h < 12 ? '☕🎄' : h < 18 ? '☀️🎁' : '🌙✨'; }
+  function prodEmoji(name) {
+    const n = String(name).toLowerCase();
+    if (/aroma|canela|olor|pino/.test(n)) return '🌲';
+    if (/estrella/.test(n)) return '⭐';
+    if (/regalo|caja/.test(n)) return '🎁';
+    if (/farol|lampar/.test(n)) return '🏮';
+    return '🕯️';
+  }
 
   function setProducts(list) {
     if (list) {
@@ -197,7 +207,7 @@
     const low = S.products.filter((p) => p.activo && p.bajo);
     const el = $('#lowStock');
     if (!low.length) { el.classList.add('hidden'); return; }
-    el.innerHTML = '⚠️ <strong>Stock bajo:</strong> ' + low.map((p) => esc(p.nombre) + ' (' + num.format(p.stock) + ' und)').join(', ');
+    el.innerHTML = '⚠️ <strong>¡Ojo, se están acabando!</strong> ' + low.map((p) => esc(p.nombre) + ' (' + num.format(p.stock) + ' und)').join(', ');
     el.classList.remove('hidden');
   }
 
@@ -212,9 +222,10 @@
       const cls = ['prod', p.bajo ? 'low' : '', p.stock <= 0 ? 'out' : ''].join(' ');
       return '<button class="' + cls + '" data-id="' + esc(p.id) + '"' + (p.stock <= 0 ? ' disabled' : '') + '>' +
         (q ? '<span class="badge">' + q + '</span>' : '') +
+        '<span class="pemoji" aria-hidden="true">' + prodEmoji(p.nombre) + '</span>' +
         '<span class="name">' + esc(p.nombre) + '</span>' +
         '<span class="price">' + (p.precio ? fmt(p.precio) : 'Sin precio') + '</span>' +
-        '<span class="stock">' + (p.stock <= 0 ? 'Agotado' : 'Quedan ' + num.format(p.stock)) + '</span>' +
+        '<span class="stock">' + (p.stock <= 0 ? '😢 Agotado' : (p.bajo ? '⚠️ Quedan ' : '📦 Quedan ') + num.format(p.stock)) + '</span>' +
         '</button>';
     }).join('');
   }
@@ -247,7 +258,7 @@
     const ids = Object.keys(S.cart);
     const box = $('#cartLines');
     if (!ids.length) {
-      box.innerHTML = '<p class="muted">Toca un producto para agregarlo.</p>';
+      box.innerHTML = '<p class="muted">👆 Toca una vela para agregarla.</p>';
     } else {
       box.innerHTML = ids.map((id) => {
         const p = S.products.find((x) => x.id === id);
@@ -255,7 +266,7 @@
         const price = linePrice(id);
         const changed = c.precio != null && c.precio !== p.precio;
         return '<div class="line" data-id="' + esc(id) + '">' +
-          '<div><div class="lname">' + esc(p.nombre) + '</div>' +
+          '<div><div class="lname">' + prodEmoji(p.nombre) + ' ' + esc(p.nombre) + '</div>' +
           '<div class="lsub">' + fmt(price) + ' c/u' + (changed ? ' (ajustado)' : '') +
           (isAdmin() ? ' · <button data-act="price">cambiar precio</button>' : '') + '</div></div>' +
           '<div class="stepper">' +
@@ -270,7 +281,7 @@
     const units = ids.reduce((t, id) => t + S.cart[id].qty, 0);
     const btn = $('#btnCharge');
     btn.disabled = !units;
-    btn.textContent = units ? 'Cobrar ' + fmt(total) + ' · ' + units + ' und' : 'Cobrar $0';
+    btn.textContent = units ? '🎁 Cobrar ' + fmt(total) + ' · ' + units + ' und' : '🎁 Cobrar $0';
   }
 
   $('#cartLines').addEventListener('click', (ev) => {
@@ -310,7 +321,7 @@
 
   function renderPayMethods() {
     $('#payMethods').innerHTML = S.payMethods.map((m) =>
-      '<button data-m="' + esc(m) + '" class="' + (m === S.metodo ? 'on' : '') + '">' + esc(m) + '</button>').join('');
+      '<button data-m="' + esc(m) + '" class="' + (m === S.metodo ? 'on' : '') + '">' + (PAY_EMOJI[m] ? PAY_EMOJI[m] + ' ' : '') + esc(m) + '</button>').join('');
   }
   $('#payMethods').addEventListener('click', (ev) => {
     const b = ev.target.closest('button'); if (!b) return;
@@ -324,9 +335,9 @@
       const p = S.products.find((x) => x.id === id);
       return '<tr><td>' + S.cart[id].qty + ' × ' + esc(p.nombre) + '</td><td class="n">' + fmt(S.cart[id].qty * linePrice(id)) + '</td></tr>';
     }).join('');
-    openSheet('Confirmar venta',
+    openSheet('🎁 Confirmar venta',
       '<table class="table">' + detail + '<tr><th>Total · ' + esc(S.metodo) + '</th><th class="n">' + fmt(cartTotal()) + '</th></tr></table>',
-      'Registrar venta', async () => {
+      '✅ Registrar venta', async () => {
         const items = ids.map((id) => ({ id: id, qty: S.cart[id].qty, precio: S.cart[id].precio }));
         try {
           const r = await api('sell', { items: items, metodo: S.metodo, cliente: $('#cliente').value.trim() });
@@ -334,9 +345,9 @@
           setProducts(r.products);
           S.report = null;
           if (r.alerts && r.alerts.length) {
-            toast('Venta ' + fmt(r.total) + ' ✓ — Stock bajo: ' + r.alerts.map((a) => a.nombre + ' (' + a.stock + ')').join(', '), true, 6000);
+            celebrate(); toast('🎉 Venta ' + fmt(r.total) + ' — ⚠️ Se acaba: ' + r.alerts.map((a) => a.nombre + ' (' + a.stock + ')').join(', '), true, 6000);
           } else {
-            toast('Venta registrada ✓ ' + fmt(r.total));
+            celebrate(); toast('🎉 ¡Venta registrada! ' + fmt(r.total) + ' 🎄');
           }
         } catch (e) {
           showErr(e);
@@ -361,9 +372,10 @@
     } catch (e) { showErr(e); }
   }
 
-  function groupTable(title, obj) {
+  function groupTable(title, obj, medals) {
     const rows = Object.keys(obj || {}).map((k) => ({ k: k, u: obj[k].unidades, t: obj[k].total }))
       .sort((a, b) => b.t - a.t || b.u - a.u);
+    if (medals) rows.forEach((r, i) => { r.k = (['🥇 ', '🥈 ', '🥉 '][i] || '') + r.k; });
     if (!rows.length) return '';
     return '<div class="card"><h2>' + esc(title) + '</h2><table class="table"><tr><th></th><th class="n">Und</th><th class="n">Valor</th></tr>' +
       rows.map((r) => '<tr><td>' + esc(r.k) + '</td><td class="n">' + num.format(r.u) + '</td><td class="n">' + fmt(r.t) + '</td></tr>').join('') +
@@ -375,12 +387,12 @@
     if (!R) { $('#reportBody').innerHTML = '<p class="muted center">Cargando…</p>'; return; }
     const sc = S.scope;
     const b = R.resumen[sc];
-    const label = { hoy: 'Vendido hoy', semana: 'Vendido esta semana', total: 'Vendido en total' }[sc];
+    const label = { hoy: '🎄 Vendido hoy', semana: '📅 Vendido esta semana', total: '🏆 Vendido en total' }[sc];
     let html = '<div class="kpis">' +
       '<div class="kpi main"><span>' + label + '</span><b>' + fmt(b.total) + '</b></div>' +
-      '<div class="kpi"><span>Unidades</span><b>' + num.format(b.unidades) + '</b></div>' +
-      '<div class="kpi"><span>Ventas</span><b>' + num.format(b.ventas) + '</b></div>' +
-      '<div class="kpi"><span>Promedio</span><b>' + fmt(b.ventas ? b.total / b.ventas : 0) + '</b></div>' +
+      '<div class="kpi"><span>🕯️ Unidades</span><b>' + num.format(b.unidades) + '</b></div>' +
+      '<div class="kpi"><span>🧾 Ventas</span><b>' + num.format(b.ventas) + '</b></div>' +
+      '<div class="kpi"><span>⭐ Promedio</span><b>' + fmt(b.ventas ? b.total / b.ventas : 0) + '</b></div>' +
       '</div>';
 
     if (sc === 'semana') {
@@ -388,29 +400,29 @@
       const names = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
       const days = names.map((n, i) => R.semanaDias[i] || null);
       const todayKey = R.generado.slice(0, 10);
-      html += '<div class="card"><h2>Por día</h2><div class="bars">' +
+      html += '<div class="card"><h2>📅 Por día</h2><div class="bars">' +
         days.map((d) => d ? '<div class="bar' + (d.dia === todayKey ? ' today' : '') + '" style="height:' + Math.round(d.total / max * 100) + '%" title="' + esc(d.dia + ': ' + fmt(d.total)) + '"></div>' : '<div></div>').join('') +
         '</div><div class="bar-labels">' + names.map((n) => '<span>' + n + '</span>').join('') + '</div>' +
         '<table class="table">' + R.semanaDias.map((d, i) => '<tr><td>' + names[i] + ' ' + esc(d.dia.slice(8)) + '</td><td class="n">' + num.format(d.unidades) + ' und</td><td class="n">' + fmt(d.total) + '</td></tr>').join('') + '</table></div>';
     }
 
-    html += groupTable('Por producto', R.porProducto[sc]);
-    html += groupTable('Por vendedora', R.porVendedor[sc]);
-    html += groupTable('Por medio de pago', R.porMetodo[sc]);
+    html += groupTable('🎁 Por producto', R.porProducto[sc]);
+    html += groupTable('🏆 Por vendedor(a)', R.porVendedor[sc], true);
+    html += groupTable('💳 Por medio de pago', R.porMetodo[sc]);
 
     const inv = S.products.filter((p) => p.activo);
-    html += '<div class="card"><h2>Inventario actual</h2><table class="table"><tr><th></th><th class="n">Stock</th><th class="n">Mínimo</th></tr>' +
+    html += '<div class="card"><h2>📦 Inventario actual</h2><table class="table"><tr><th></th><th class="n">Stock</th><th class="n">Mínimo</th></tr>' +
       inv.map((p) => '<tr><td>' + esc(p.nombre) + (p.bajo ? ' ⚠️' : '') + '</td><td class="n">' + num.format(p.stock) + '</td><td class="n">' + num.format(p.stock_minimo) + '</td></tr>').join('') +
       '</table></div>';
 
     if (sc === 'hoy') {
-      html += '<div class="card"><h2>Ventas de hoy</h2>' + (R.ventasHoy.length ? R.ventasHoy.map((v) =>
+      html += '<div class="card"><h2>🧾 Ventas de hoy</h2>' + (R.ventasHoy.length ? R.ventasHoy.map((v) =>
         '<div class="sale' + (v.estado === 'anulada' ? ' void' : '') + '">' +
         '<div><b>' + esc(v.hora) + '</b> · ' + esc(v.vendedor) + ' · ' + esc(v.metodo) + (v.cliente ? ' · ' + esc(v.cliente) : '') + '</div>' +
         '<div class="stot">' + fmt(v.total) + '</div>' +
         '<div class="sdet">' + v.items.map((i) => esc(i.cantidad + ' × ' + i.producto + ' a ' + fmt(i.precio))).join('<br>') + '</div>' +
         (v.estado === 'anulada' ? '<div class="svoid">Anulada</div>' : (isAdmin() ? '<button class="svoid" data-void="' + esc(v.venta_id) + '">Anular</button>' : '<div></div>')) +
-        '</div>').join('') : '<p class="muted">Aún no hay ventas hoy.</p>') + '</div>';
+        '</div>').join('') : '<p class="muted">Aún no hay ventas hoy. ¡A vender! 🎅</p>') + '</div>';
     }
     html += '<p class="muted small center">Actualizado ' + esc(R.generado) + '</p>';
     $('#reportBody').innerHTML = html;
@@ -423,7 +435,7 @@
       try {
         const r = await api('void', { venta_id: id });
         setProducts(r.products);
-        toast('Venta anulada');
+        toast('↩️ Venta anulada');
         await loadReport();
       } catch (e) { showErr(e); }
     }, true);
@@ -434,10 +446,10 @@
     if (!S.user) return;
     $('#productAdmin').innerHTML = S.products.map((p) =>
       '<div class="card padmin" data-id="' + esc(p.id) + '">' +
-      '<div class="pname">' + esc(p.nombre) + (p.activo ? '' : '<span class="tag">inactivo</span>') + '</div>' +
+      '<div class="pname">' + prodEmoji(p.nombre) + ' ' + esc(p.nombre) + (p.activo ? '' : '<span class="tag">inactivo</span>') + '</div>' +
       '<div class="price"><b>' + fmt(p.precio) + '</b></div>' +
-      '<div class="pmeta" style="grid-column:1/-1">Stock <b class="' + (p.bajo ? 'low' : '') + '">' + num.format(p.stock) + '</b> · aviso en ' + num.format(p.stock_minimo) + '</div>' +
-      (isAdmin() ? '<div class="actions"><button class="ghost" data-act="edit">Editar / precio</button><button class="ghost" data-act="stock">Entrada / ajuste</button></div>' : '') +
+      '<div class="pmeta" style="grid-column:1/-1">📦 Stock <b class="' + (p.bajo ? 'low' : '') + '">' + num.format(p.stock) + '</b> · ⚠️ aviso en ' + num.format(p.stock_minimo) + '</div>' +
+      (isAdmin() ? '<div class="actions"><button class="ghost" data-act="edit">✏️ Editar / precio</button><button class="ghost" data-act="stock">📦 Entrada / ajuste</button></div>' : '') +
       '</div>').join('') || '<p class="muted">Sin productos.</p>';
   }
 
@@ -471,7 +483,7 @@
         try {
           const r = await api('saveProduct', { product: prod });
           setProducts(r.products); S.report = null;
-          toast('Producto guardado ✓');
+          toast('🎁 Producto guardado ✓');
         } catch (e) { showErr(e); }
       });
   }
@@ -489,7 +501,7 @@
         try {
           const r = await api('adjustStock', { id: p.id, cantidad: out ? -q : q, nota: $('#fNote').value.trim() });
           setProducts(r.products); S.report = null;
-          toast('Inventario actualizado ✓');
+          toast('📦 Inventario actualizado ✓');
         } catch (e) { showErr(e); }
       });
     $('#fType').addEventListener('click', (ev) => {
@@ -505,7 +517,7 @@
     try {
       await api('changePin', { actual: a, nueva: n });
       $('#pinOld').value = ''; $('#pinNew').value = '';
-      toast('PIN cambiado ✓');
+      toast('🔑 PIN cambiado ✓');
     } catch (e) { showErr(e); }
   });
   $('#btnLogout').addEventListener('click', async () => {
@@ -549,8 +561,40 @@
     } finally { $('#sheetOk').disabled = false; }
   });
 
+  /* ───────────── Ambiente navideño ───────────── */
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function makeSnow() {
+    const box = $('#snow'); if (!box || reduceMotion) return;
+    const flakes = ['❄', '❅', '❆', '•'];
+    for (let i = 0; i < 22; i++) {
+      const f = document.createElement('span');
+      f.textContent = flakes[i % flakes.length];
+      f.style.left = Math.random() * 100 + 'vw';
+      f.style.fontSize = (8 + Math.random() * 12) + 'px';
+      f.style.animationDuration = (9 + Math.random() * 12) + 's';
+      f.style.animationDelay = (-Math.random() * 20) + 's';
+      f.style.opacity = (0.35 + Math.random() * 0.5).toFixed(2);
+      box.appendChild(f);
+    }
+  }
+  function celebrate() {
+    if (reduceMotion) return;
+    const items = ['🎉', '🎄', '⭐', '🎁', '✨', '🕯️', '❄️'];
+    for (let i = 0; i < 18; i++) {
+      const c = document.createElement('span');
+      c.className = 'confetti';
+      c.textContent = items[i % items.length];
+      c.style.left = (10 + Math.random() * 80) + 'vw';
+      c.style.animationDelay = (Math.random() * 0.4) + 's';
+      c.style.fontSize = (18 + Math.random() * 14) + 'px';
+      document.body.appendChild(c);
+      setTimeout(() => c.remove(), 2600);
+    }
+  }
+  makeSnow();
+
   /* ───────────── Inicio ───────────── */
-  if (CFG.STORE_NAME) { $('#storeName').textContent = CFG.STORE_NAME; $('#hdrStore').textContent = CFG.STORE_NAME; }
+  if (CFG.STORE_NAME) { $('#storeName').textContent = CFG.STORE_NAME; $('#hdrStore').textContent = '🎄 ' + CFG.STORE_NAME; }
   // Pedir a Chrome que no borre los datos de la app (la sesión) aunque falte espacio.
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
