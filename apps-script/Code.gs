@@ -71,7 +71,7 @@ function setup() {
 
   const prods = ss.getSheetByName(SH.PRODUCTS);
   if (prods.getLastRow() === 1) {
-    prods.getRange(2, 1, 1, 7).setValues([['P001', 'Kit alumbrado', 0, 150, 20, true, new Date()]]);
+    prods.getRange(2, 1, 1, 7).setValues([['P001', 'Kit alumbrado', 35000, 150, 20, true, new Date()]]);
     addMove_('setup', 'P001', 'Kit alumbrado', 'alta', 150, 150, 'Inventario inicial');
   }
   Logger.log('Listo. Los PIN iniciales están en la pestaña "usuarios" (se cifran solos al primer ingreso).');

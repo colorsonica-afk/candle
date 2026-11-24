@@ -22,7 +22,7 @@ Punto de venta para celular (PWA instalable desde Chrome) para vender velas de N
 2. Menú **Extensiones → Apps Script**. Borra lo que haya y pega `apps-script/Code.gs`. Arriba, en `USUARIOS_INICIALES`, escribe el correo y nombre de cada usuaria (los correos no se guardan en este repositorio).
 3. En ⚙️ Configuración del proyecto marca “Mostrar archivo de manifiesto appsscript.json” y reemplázalo con `apps-script/appsscript.json`.
 4. Selecciona la función `setup` y presiona ▶ Ejecutar. Acepta los permisos.
-   Se crean las pestañas, las 3 usuarias con un PIN aleatorio (en la pestaña `usuarios`) y el producto *Kit alumbrado* con 150 unidades, precio $0 y aviso a las 20.
+   Se crean las pestañas, las 3 usuarias con un PIN aleatorio (en la pestaña `usuarios`) y el producto *Kit alumbrado* con 150 unidades, precio $35.000 y aviso a las 20.
 5. **Implementar → Nueva implementación → Aplicación web**: Ejecutar como *Yo*, Acceso *Cualquier usuario*. Copia la URL que termina en `/exec`.
 
 ### 2. App
