@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=3">
+  <link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
   <div id="snow" class="snow" aria-hidden="true"></div>
@@ -54,6 +54,10 @@
     <div class="lights" aria-hidden="true"></div>
 
     <div id="lowStock" class="alert hidden" role="status"></div>
+    <div id="installBar" class="install-bar hidden">
+      <span>📲 Instala la app en tu celular</span>
+      <button id="btnInstallTop" class="primary">Instalar 🎄</button>
+    </div>
 
     <main>
       <!-- VENDER -->
@@ -134,6 +138,6 @@
   <div id="busy" class="busy hidden"><div class="spinner"></div></div>
 
   <script src="config.js?v=3"></script>
-  <script src="app.js?v=3"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>

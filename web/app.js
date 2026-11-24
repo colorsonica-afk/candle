@@ -528,13 +528,17 @@
 
   let installEvt = null;
   window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault(); installEvt = e; $('#btnInstall').classList.remove('hidden');
+    e.preventDefault(); installEvt = e;
+    $('#btnInstall').classList.remove('hidden'); $('#installBar').classList.remove('hidden');
   });
-  $('#btnInstall').addEventListener('click', async () => {
+  async function doInstall() {
     if (!installEvt) return;
     installEvt.prompt(); await installEvt.userChoice; installEvt = null;
-    $('#btnInstall').classList.add('hidden');
-  });
+    $('#btnInstall').classList.add('hidden'); $('#installBar').classList.add('hidden');
+  }
+  $('#btnInstall').addEventListener('click', doInstall);
+  $('#btnInstallTop').addEventListener('click', doInstall);
+  window.addEventListener('appinstalled', () => { $('#installBar').classList.add('hidden'); $('#btnInstall').classList.add('hidden'); });
 
   /* ───────────── Hoja de diálogo ───────────── */
   let sheetAction = null;

@@ -273,3 +273,8 @@ h1, h2, .topbar strong { font-family: Georgia, "Times New Roman", serif; letter-
 .login .snow, .snow { z-index: 1; }
 .login-card h1 { font-size: 1.7rem; }
 .login-deco { font-size: 1.4rem; letter-spacing: 6px; margin: 4px 0 0; }
+.install-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin: 0; padding: 10px 16px; background: #fff4d6; border-bottom: 1px solid var(--gold); font-weight: 600; color: #1d2420;
+}
+.install-bar .primary { min-height: 40px; padding: 8px 14px; white-space: nowrap; }
