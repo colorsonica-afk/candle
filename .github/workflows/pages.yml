@@ -1,7 +1,7 @@
 name: Publicar app (GitHub Pages)
 on:
   push:
-    branches: [main]
+    branches: [ccr-97a75231-27kfxt]
     paths: ['web/**']
   workflow_dispatch:
 permissions:

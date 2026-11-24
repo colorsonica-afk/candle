@@ -27,7 +27,7 @@ Punto de venta para celular (PWA instalable desde Chrome) para vender velas de N
 
 ### 2. App
 1. Pega esa URL en `web/config.js` (`API_URL`).
-2. Publica la carpeta `web/` en un hosting HTTPS. Con GitHub Pages: Settings → Pages → Source: *GitHub Actions*; el flujo `.github/workflows/pages.yml` la publica en cada cambio de `web/` en `main`.
+2. Publica la carpeta `web/` en un hosting HTTPS. Con GitHub Pages: Settings → Pages → Source: *GitHub Actions*; el flujo `.github/workflows/pages.yml` la publica en cada cambio de `web/` en la rama principal.
 
 ### 3. En cada celular
 Abrir el enlace en Chrome → menú ⋮ → **Instalar app** / “Agregar a la pantalla principal”. Ingresar con el correo y el PIN. Cada una puede cambiar su PIN en *Cuenta*.
