@@ -189,7 +189,9 @@ function requireAdmin_(user) {
 }
 
 function hashPin_(email, pin) {
-  const salt = PropertiesService.getScriptProperties().getProperty('PIN_SALT') || '';
+  const props = PropertiesService.getScriptProperties();
+  let salt = props.getProperty('PIN_SALT');
+  if (!salt) { salt = Utilities.getUuid() + Utilities.getUuid(); props.setProperty('PIN_SALT', salt); }
   const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, salt + '|' + email + '|' + pin, Utilities.Charset.UTF_8);
   return 'h:' + bytes.map(function (b) { return ('0' + (b & 0xff).toString(16)).slice(-2); }).join('');
 }
