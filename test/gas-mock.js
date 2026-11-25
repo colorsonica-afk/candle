@@ -24,7 +24,8 @@ function load() {
   const ss = {
     getSheetByName: n => sheets[n] || null,
     insertSheet: n => (sheets[n] = makeSheet(n)),
-    setSpreadsheetTimeZone() {}
+    setSpreadsheetTimeZone() {},
+    getUrl: () => 'https://docs.google.com/spreadsheets/d/TEST/edit'
   };
   const fmt = (d, tz, p) => {
     const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', weekday: 'short', hour12: false }).formatToParts(d).map(x => [x.type, x.value]));

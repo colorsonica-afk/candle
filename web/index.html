@@ -7,11 +7,11 @@
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src https://script.google.com https://script.googleusercontent.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
   <meta name="theme-color" content="#14231c">
-  <title>🎄 Velas POS</title>
+  <title>🎄 Sahana</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=4">
+  <link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body>
   <div id="snow" class="snow" aria-hidden="true"></div>
@@ -19,15 +19,15 @@
   <section id="login" class="login hidden" aria-label="Ingreso">
     <div class="login-card">
       <div class="flame" aria-hidden="true"></div>
-      <h1 id="storeName">Velas de Navidad</h1>
-      <p class="muted">Punto de venta familiar ✨</p>
+      <h1 id="storeName">Sahana</h1>
+      <p class="muted">Velas de Navidad · punto de venta familiar ✨</p>
       <p class="login-deco" aria-hidden="true">🎄🎅🎁⭐🕯️</p>
       <label class="field">
         <span>📧 Correo</span>
         <input id="email" type="email" inputmode="email" autocomplete="username" placeholder="tucorreo@gmail.com">
       </label>
       <div class="field">
-        <span>🔑 PIN de 4 dígitos</span>
+        <span>🔑 Llave de 4 dígitos</span>
         <div class="pin-dots" id="pinDots" aria-live="polite"><i></i><i></i><i></i><i></i></div>
       </div>
       <div class="keypad" id="keypad">
@@ -46,7 +46,7 @@
   <div id="app" class="hidden">
     <header class="topbar">
       <div>
-        <strong id="hdrStore">🎄 Velas de Navidad</strong>
+        <strong id="hdrStore">🎄 Sahana</strong>
         <small id="hdrUser" class="muted"></small>
       </div>
       <button id="btnRefresh" class="icon-btn" aria-label="Actualizar">⟳</button>
@@ -71,10 +71,13 @@
             <span>💳 ¿Cómo paga?</span>
             <div id="payMethods" class="chips"></div>
           </div>
-          <label class="field">
-            <span>🙋 Cliente (opcional)</span>
-            <input id="cliente" type="text" maxlength="80" autocomplete="off" placeholder="Nombre o celular">
-          </label>
+          <div class="field">
+            <span>🙋 Cliente</span>
+            <div class="client-row">
+              <button id="btnClient" class="client-pick">👤 Elegir cliente (opcional)</button>
+              <button id="btnClientClear" class="ghost hidden" aria-label="Quitar cliente">✖</button>
+            </div>
+          </div>
           <button id="btnCharge" class="primary big charge" disabled>🎁 Cobrar $0</button>
         </div>
       </section>
@@ -95,16 +98,29 @@
         <button id="btnNewProduct" class="secondary big">➕ Agregar producto 🎁</button>
       </section>
 
+      <!-- CLIENTES -->
+      <section id="view-clients" class="view hidden">
+        <div class="kpi main debt-card"><span>💰 Por cobrar (fiado)</span><b id="debtTotal">$ 0</b></div>
+        <input id="clientSearch" type="search" placeholder="🔎 Buscar por nombre o celular" autocomplete="off">
+        <div id="clientList" class="client-list"></div>
+        <button id="btnNewClient" class="secondary big">➕ Nuevo cliente</button>
+      </section>
+
       <!-- CUENTA -->
       <section id="view-account" class="view hidden">
         <div class="card">
           <h2>🎅 Mi cuenta</h2>
           <p id="accInfo" class="muted"></p>
-          <label class="field"><span>PIN actual</span>
+          <label class="field"><span>🔑 Llave actual</span>
             <input id="pinOld" type="password" inputmode="numeric" maxlength="4" pattern="\d{4}" autocomplete="current-password"></label>
-          <label class="field"><span>PIN nuevo</span>
+          <label class="field"><span>🔑 Llave nueva</span>
             <input id="pinNew" type="password" inputmode="numeric" maxlength="4" pattern="\d{4}" autocomplete="new-password"></label>
-          <button id="btnPin" class="secondary">🔑 Cambiar PIN</button>
+          <button id="btnPin" class="secondary">🔑 Cambiar llave</button>
+        </div>
+        <div id="sheetCard" class="card hidden">
+          <h2>📄 Archivo maestro</h2>
+          <p class="muted small">La hoja de Google con todas las ventas, clientes, abonos e inventario.</p>
+          <a id="sheetLink" class="secondary big link-btn" href="#" target="_blank" rel="noopener">📄 Abrir archivo maestro</a>
         </div>
         <div class="card">
           <button id="btnInstall" class="secondary hidden">📲 Instalar en este celular</button>
@@ -117,6 +133,7 @@
     <nav class="tabs">
       <button data-v="sell" class="on"><span>🕯️</span>Vender</button>
       <button data-v="report"><span>📊</span>Informes</button>
+      <button data-v="clients"><span>👥</span>Clientes</button>
       <button data-v="products"><span>🎁</span>Productos</button>
       <button data-v="account"><span>🎅</span>Cuenta</button>
     </nav>
@@ -137,7 +154,7 @@
   <div id="toast" class="toast hidden" role="status"></div>
   <div id="busy" class="busy hidden"><div class="spinner"></div></div>
 
-  <script src="config.js?v=3"></script>
-  <script src="app.js?v=4"></script>
+  <script src="config.js?v=5"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>

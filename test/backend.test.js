@@ -26,7 +26,8 @@ assert.strictEqual(r.products[0].stock, 150);
 // Precio y venta
 r = G.call({ action: 'saveProduct', token: T, product: { id: 'P001', nombre: 'Kit alumbrado', precio: 35000, stock_minimo: 20 } });
 assert.strictEqual(r.products[0].precio, 35000);
-r = G.call({ action: 'sell', token: T, items: [{ id: 'P001', qty: 3 }], metodo: 'Nequi', cliente: '=HYPERLINK("x")' });
+const cf = G.call({ action: 'saveClient', token: T, client: { nombre: '=HYPERLINK("x")' } }).id;
+r = G.call({ action: 'sell', token: T, items: [{ id: 'P001', qty: 3 }], metodo: 'Nequi', cliente_id: cf });
 assert.ok(r.ok, r.msg); assert.strictEqual(r.total, 105000); assert.strictEqual(r.products[0].stock, 147);
 assert.ok(G.sheets.ventas.data[1][10].startsWith("'="), 'fórmula neutralizada');
 // Precio ajustado en la venta
@@ -92,4 +93,31 @@ users[1][4] = false;
 assert.strictEqual(G.call({ action: 'bootstrap', token: T2 }).code, 'SESSION');
 users[1][4] = true;
 assert.strictEqual(G.call({ action: 'bootstrap', token: T2 }).code, 'SESSION', 'sesión revocada no revive');
+// ── Clientes, fiado y abonos ──
+const TC = G.call({ action: 'login', email: 'ana@test.co', pin: '4321' }).token;
+assert.ok(G.call({ action: 'bootstrap', token: TC }).sheetUrl, 'admin ve archivo maestro');
+assert.ok(G.call({ action: 'bootstrap', token: TC }).payMethods.includes('Fiado'));
+assert.match(G.call({ action: 'saveClient', token: TC, client: { nombre: 'Doña Rosa', celular: '12' } }).msg, /Celular/);
+r = G.call({ action: 'saveClient', token: TC, client: { nombre: 'Doña Rosa', celular: '+57 300 123 4567' } });
+assert.ok(r.ok, r.msg); const CID = r.id; assert.strictEqual(CID, 'C0002');
+assert.strictEqual(r.clients.find(c => c.id === CID).celular, '3001234567');
+assert.match(G.call({ action: 'saveClient', token: TC, client: { nombre: 'Otra', celular: '3001234567' } }).msg, /Ya existe/);
+assert.match(G.call({ action: 'sell', token: TC, items: [{ id: 'P001', qty: 1 }], metodo: 'Fiado' }).msg, /elige el cliente/);
+r = G.call({ action: 'sell', token: TC, items: [{ id: 'P001', qty: 2 }], metodo: 'Fiado', cliente_id: CID });
+assert.ok(r.ok, r.msg); assert.strictEqual(r.cliente.saldo, 70000); assert.strictEqual(r.cliente.celular, '3001234567');
+const fiadoVid = r.venta_id;
+r = G.call({ action: 'addPayment', token: TC, cliente_id: CID, valor: 30000, metodo: 'Nequi' });
+assert.strictEqual(r.saldo, 40000);
+r = G.call({ action: 'report', token: TC }); assert.strictEqual(r.porCobrar, 40000);
+r = G.call({ action: 'clientDetail', token: TC, cliente_id: CID });
+assert.strictEqual(r.historial.length, 2); assert.strictEqual(r.cliente.saldo, 40000);
+// Venta normal con cliente no cambia saldo
+r = G.call({ action: 'sell', token: TC, items: [{ id: 'P001', qty: 1 }], metodo: 'Efectivo', cliente_id: CID });
+assert.strictEqual(r.cliente.saldo, 40000);
+// Anular la venta fiada deja saldo a favor
+G.call({ action: 'void', token: TC, venta_id: fiadoVid });
+r = G.call({ action: 'clients', token: TC }); assert.strictEqual(r.clients.find(c => c.id === CID).saldo, -30000);
+// Hoja vieja sin pestañas nuevas: se crean solas
+assert.ok(G.sheets.clientes && G.sheets.abonos);
+assert.strictEqual(G.sheets.ventas.data[0][12], 'cliente_id');
 console.log('Backend OK — todas las pruebas pasaron');

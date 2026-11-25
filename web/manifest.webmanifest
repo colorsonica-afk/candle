@@ -1,6 +1,6 @@
 {
-  "name": "POS Velas de Navidad",
-  "short_name": "Velas POS",
+  "name": "Sahana · Velas de Navidad",
+  "short_name": "Sahana",
   "description": "Punto de venta de velas de Navidad",
   "start_url": "./index.html",
   "scope": "./",

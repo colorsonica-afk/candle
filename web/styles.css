@@ -278,3 +278,41 @@ h1, h2, .topbar strong { font-family: Georgia, "Times New Roman", serif; letter-
   margin: 0; padding: 10px 16px; background: #fff4d6; border-bottom: 1px solid var(--gold); font-weight: 600; color: #1d2420;
 }
 .install-bar .primary { min-height: 40px; padding: 8px 14px; white-space: nowrap; }
+
+/* ───────────── Clientes y fiado ───────────── */
+.tabs { grid-template-columns: repeat(5, 1fr); }
+.tabs button { font-size: .7rem; }
+.client-row { display: flex; gap: 8px; }
+.client-pick {
+  flex: 1; text-align: left; padding: 12px 14px; border-radius: 10px; border: 1px dashed var(--muted);
+  background: var(--surface); font-weight: 600; min-height: 46px;
+}
+.client-pick.chosen { border: 2px solid #2e7d4f; background: rgba(46,125,79,.08); }
+.client-row .ghost { width: 46px; padding: 0; }
+.client-list { display: grid; gap: 8px; margin: 12px 0; }
+.client-item {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px; text-align: left;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; box-shadow: var(--shadow);
+}
+.client-item small { display: block; color: var(--muted); font-size: .82rem; }
+.saldo { font-size: .85rem; font-weight: 700; color: #2e7d4f; white-space: nowrap; }
+.saldo.debe { color: var(--red); }
+.debt-card { margin-bottom: 12px; display: block; }
+.debt-line { width: 100%; text-align: left; color: var(--ink); font-size: .95rem; }
+.debt-line b { color: var(--red); }
+#clientSearch, #pickSearch { margin-bottom: 4px; }
+.wa-btn {
+  display: block; text-align: center; margin-top: 12px; padding: 14px 16px; border-radius: 12px;
+  background: #25d366; color: #0b2e17; font-weight: 800; text-decoration: none; font-size: 1.05rem;
+}
+.link-btn { display: block; text-align: center; text-decoration: none; }
+.big-total { font-size: 1.8rem; font-weight: 800; margin: 4px 0 8px; color: #2e7d4f; }
+.big-total.debe { color: var(--red); }
+.row.wrap { flex-wrap: wrap; margin-top: 8px; }
+.row.wrap > * { flex: 1 1 40%; }
+.hist { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.hist small { display: block; color: var(--muted); font-size: .8rem; }
+.hist.abono b { color: #2e7d4f; }
+.hist.void { opacity: .5; text-decoration: line-through; }
+/* el aviso flotante va arriba para no tapar botones de las hojas */
+.toast { bottom: auto; top: calc(84px + env(safe-area-inset-top)); }

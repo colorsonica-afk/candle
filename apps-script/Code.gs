@@ -22,15 +22,19 @@ const SH = {
   PRODUCTS: 'productos',
   SALES: 'ventas',
   MOVES: 'movimientos',
-  LOG: 'accesos'
+  LOG: 'accesos',
+  CLIENTS: 'clientes',
+  PAYMENTS: 'abonos'
 };
 
 const HEADERS = {
   usuarios: ['email', 'nombre', 'pin', 'rol', 'activo'],
   productos: ['id', 'nombre', 'precio', 'stock', 'stock_minimo', 'activo', 'actualizado'],
-  ventas: ['venta_id', 'fecha', 'email', 'vendedor', 'producto_id', 'producto', 'cantidad', 'precio_unit', 'total', 'metodo_pago', 'cliente', 'estado'],
+  ventas: ['venta_id', 'fecha', 'email', 'vendedor', 'producto_id', 'producto', 'cantidad', 'precio_unit', 'total', 'metodo_pago', 'cliente', 'estado', 'cliente_id'],
   movimientos: ['fecha', 'email', 'producto_id', 'producto', 'tipo', 'cantidad', 'stock_resultante', 'nota'],
-  accesos: ['fecha', 'email', 'resultado']
+  accesos: ['fecha', 'email', 'resultado'],
+  clientes: ['id', 'nombre', 'celular', 'nota', 'creado', 'creado_por'],
+  abonos: ['fecha', 'cliente_id', 'cliente', 'valor', 'metodo_pago', 'email', 'nota']
 };
 
 /** Correos y nombres de quienes pueden entrar. Llénalo ANTES de ejecutar setup() (no se guarda en el repositorio). */
@@ -38,7 +42,9 @@ const USUARIOS_INICIALES = [
   // ['correo@gmail.com', 'Nombre'],
 ];
 
-const PAY_METHODS = ['Efectivo', 'Transferencia', 'Nequi', 'Daviplata', 'Tarjeta'];
+const PAY_METHODS = ['Efectivo', 'Transferencia', 'Nequi', 'Daviplata', 'Tarjeta', 'Fiado'];
+const FIADO = 'Fiado';
+const STORE_NAME = 'Sahana';
 
 /* ───────────────────────── Configuración inicial ───────────────────────── */
 
@@ -59,6 +65,7 @@ function setup() {
     }
   });
 
+  sheet_(SH.CLIENTS); sheet_(SH.PAYMENTS);
   const props = PropertiesService.getScriptProperties();
   if (!props.getProperty('PIN_SALT')) props.setProperty('PIN_SALT', Utilities.getUuid() + Utilities.getUuid());
 
@@ -89,6 +96,7 @@ function doGet() {
 }
 
 function doPost(e) {
+  balancesMemo_ = null;
   let req;
   try {
     req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
@@ -108,6 +116,10 @@ function doPost(e) {
       case 'adjustStock': return json_(adjustStock_(user, req));
       case 'report': return json_(report_(user));
       case 'changePin': return json_(changePin_(user, req));
+      case 'clients': return json_({ ok: true, clients: clientsWithBalance_() });
+      case 'saveClient': return json_(saveClient_(user, req));
+      case 'addPayment': return json_(addPayment_(user, req));
+      case 'clientDetail': return json_(clientDetail_(req));
       case 'logout': dropSession_(req.token); return json_({ ok: true });
       default: return json_({ ok: false, msg: 'Acción desconocida' });
     }
@@ -133,7 +145,7 @@ function login_(req) {
   const email = String(req.email || '').trim().toLowerCase();
   const pin = String(req.pin || '');
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || !/^\d{4}$/.test(pin)) {
-    return { ok: false, msg: 'Correo o PIN inválido' };
+    return { ok: false, msg: 'Correo o llave inválida' };
   }
   const cache = CacheService.getScriptCache();
   const failKey = 'f:' + email;
@@ -165,7 +177,7 @@ function login_(req) {
   if (!okPin) {
     cache.put(failKey, String(fails + 1), LOCK_SECONDS);
     logAccess_(email, 'fallido');
-    return { ok: false, msg: 'Correo o PIN incorrecto' };
+    return { ok: false, msg: 'Correo o llave incorrecta' };
   }
 
   cache.remove(failKey);
@@ -254,14 +266,14 @@ function hashPin_(email, pin) {
 
 function changePin_(user, req) {
   const actual = String(req.actual || ''), nueva = String(req.nueva || '');
-  if (!/^\d{4}$/.test(nueva)) fail_('El nuevo PIN debe tener 4 dígitos.');
+  if (!/^\d{4}$/.test(nueva)) fail_('La nueva llave debe tener 4 dígitos.');
   const sh = sheet_(SH.USERS);
   const rows = sh.getDataRange().getValues();
   for (let i = 1; i < rows.length; i++) {
     if (String(rows[i][0]).trim().toLowerCase() === user.email) {
       const stored = String(rows[i][2]).trim();
       const ok = stored.indexOf('h:') === 0 ? stored === hashPin_(user.email, actual) : ('0000' + stored).slice(-4) === actual;
-      if (!ok) fail_('El PIN actual no es correcto.');
+      if (!ok) fail_('La llave actual no es correcta.');
       sh.getRange(i + 1, 3).setValue(hashPin_(user.email, nueva));
       return { ok: true };
     }
@@ -301,7 +313,9 @@ function publicProduct_(p) {
 
 function bootstrap_(user) {
   const products = readProducts_().map(publicProduct_);
-  return { ok: true, user: user, products: products, payMethods: PAY_METHODS };
+  const out = { ok: true, user: user, products: products, payMethods: PAY_METHODS, clients: clientsWithBalance_() };
+  if (user.rol === 'admin') out.sheetUrl = SpreadsheetApp.getActiveSpreadsheet().getUrl();
+  return out;
 }
 
 function saveProduct_(user, req) {
@@ -367,7 +381,13 @@ function sell_(user, req) {
   const items = Array.isArray(req.items) ? req.items : [];
   if (!items.length || items.length > 50) fail_('El carrito está vacío.');
   const metodo = PAY_METHODS.indexOf(req.metodo) >= 0 ? req.metodo : PAY_METHODS[0];
-  const cliente = safeText_(String(req.cliente || '').trim()).slice(0, 80);
+  let cliente = '', clienteId = '', client = null;
+  if (req.cliente_id) {
+    client = findClient_(String(req.cliente_id));
+    if (!client) fail_('El cliente ya no existe.');
+    cliente = client.nombre; clienteId = client.id;
+  }
+  if (metodo === FIADO && !client) fail_('Para fiar, elige el cliente que queda debiendo.');
 
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
@@ -407,7 +427,7 @@ function sell_(user, req) {
       const l = lines[k];
       const t = l.qty * l.price;
       total += t; unidades += l.qty;
-      rows.push([ventaId, now, user.email, safeText_(user.nombre), l.p.id, l.p.nombre, l.qty, l.price, t, metodo, cliente, 'ok']);
+      rows.push([ventaId, now, user.email, safeText_(user.nombre), l.p.id, l.p.nombre, l.qty, l.price, t, metodo, cliente, 'ok', clienteId]);
     });
     const sales = sheet_(SH.SALES);
     sales.getRange(sales.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
@@ -422,7 +442,10 @@ function sell_(user, req) {
       addMove_(user.email, id, p.nombre, 'venta', -need[id], p.stock, ventaId);
       if (p.stock <= p.stock_minimo && antes > p.stock_minimo) alerts.push(p);
     });
-    result = { ok: true, venta_id: ventaId, total: total, unidades: unidades, products: products.map(publicProduct_) };
+    result = { ok: true, venta_id: ventaId, total: total, unidades: unidades, metodo: metodo, products: products.map(publicProduct_) };
+    if (client) {
+      result.cliente = { id: client.id, nombre: client.nombre, celular: client.celular, saldo: balances_()[client.id] || 0 };
+    }
     result.alerts = alerts.map(function (p) { return { nombre: p.nombre, stock: p.stock, stock_minimo: p.stock_minimo }; });
     if (alerts.length) notifyLowStock_(alerts);
   } finally {
@@ -472,8 +495,8 @@ function notifyLowStock_(alerts) {
     const lines = alerts.map(function (a) { return '• ' + a.nombre + ': quedan ' + a.stock + ' (mínimo ' + a.stock_minimo + ')'; });
     MailApp.sendEmail({
       to: to.join(','),
-      subject: 'Stock bajo — ' + alerts.map(function (a) { return a.nombre; }).join(', '),
-      body: 'Aviso del POS de velas:\n\n' + lines.join('\n') + '\n\nEs momento de reponer inventario.'
+      subject: '🕯️ ' + STORE_NAME + ' — stock bajo: ' + alerts.map(function (a) { return a.nombre; }).join(', '),
+      body: 'Aviso del punto de venta ' + STORE_NAME + ':\n\n' + lines.join('\n') + '\n\nEs momento de reponer inventario.'
     });
   } catch (e) {
     console.error('No se pudo enviar el aviso de stock: ' + e);
@@ -536,6 +559,7 @@ function report_(user) {
     porVendedor: porVendedor,
     porMetodo: porMetodo,
     ventasHoy: lista,
+    porCobrar: Object.keys(balances_()).reduce(function (t, k) { const b = balances_()[k]; return t + (b > 0 ? b : 0); }, 0),
     products: readProducts_().map(publicProduct_)
   };
 }
@@ -565,11 +589,145 @@ function addToday_(map, r) {
   map[id].total += Number(r[8]) || 0;
 }
 
+/* ─────────────────────────────── Clientes y fiado ─────────────────────────────── */
+
+function readClients_() {
+  const rows = sheet_(SH.CLIENTS).getDataRange().getValues();
+  const list = [];
+  for (let i = 1; i < rows.length; i++) {
+    if (!rows[i][0]) continue;
+    list.push({ row: i + 1, id: String(rows[i][0]), nombre: String(rows[i][1]), celular: String(rows[i][2] || ''), nota: String(rows[i][3] || '') });
+  }
+  return list;
+}
+
+function findClient_(id) {
+  return readClients_().filter(function (c) { return c.id === id; })[0] || null;
+}
+
+let balancesMemo_ = null;
+/** Saldo por cliente = ventas fiadas (no anuladas) − abonos. */
+function balances_() {
+  if (balancesMemo_) return balancesMemo_;
+  const bal = {};
+  const sales = sheet_(SH.SALES).getDataRange().getValues();
+  for (let i = 1; i < sales.length; i++) {
+    const r = sales[i];
+    if (!r[0] || r[11] === 'anulada' || r[9] !== FIADO || !r[12]) continue;
+    bal[r[12]] = (bal[r[12]] || 0) + (Number(r[8]) || 0);
+  }
+  const pays = sheet_(SH.PAYMENTS).getDataRange().getValues();
+  for (let j = 1; j < pays.length; j++) {
+    if (!pays[j][1]) continue;
+    bal[pays[j][1]] = (bal[pays[j][1]] || 0) - (Number(pays[j][3]) || 0);
+  }
+  balancesMemo_ = bal;
+  return bal;
+}
+
+function clientsWithBalance_() {
+  balancesMemo_ = null;
+  const bal = balances_();
+  return readClients_().map(function (c) {
+    return { id: c.id, nombre: c.nombre, celular: c.celular, nota: c.nota, saldo: bal[c.id] || 0 };
+  }).sort(function (a, b) { return (b.saldo > 0) - (a.saldo > 0) || a.nombre.localeCompare(b.nombre); });
+}
+
+function cleanPhone_(v) {
+  let d = String(v || '').replace(/\D/g, '');
+  if (d.length === 12 && d.indexOf('57') === 0) d = d.slice(2);
+  if (d && !/^\d{7,10}$/.test(d)) fail_('Celular inválido: escribe los 10 dígitos.');
+  return d;
+}
+
+function saveClient_(user, req) {
+  const c = req.client || {};
+  const nombre = safeText_(String(c.nombre || '').trim()).slice(0, 80);
+  if (!nombre) fail_('El cliente necesita un nombre.');
+  const celular = cleanPhone_(c.celular);
+  const nota = safeText_(String(c.nota || '').trim()).slice(0, 120);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  let id;
+  try {
+    const sh = sheet_(SH.CLIENTS);
+    const list = readClients_();
+    if (c.id) {
+      const cur = list.filter(function (x) { return x.id === String(c.id); })[0];
+      if (!cur) fail_('Cliente no encontrado.');
+      sh.getRange(cur.row, 2, 1, 3).setValues([[nombre, celular, nota]]);
+      id = cur.id;
+    } else {
+      if (celular && list.some(function (x) { return x.celular === celular; })) fail_('Ya existe un cliente con ese celular.');
+      let max = 0;
+      list.forEach(function (x) { const n = Number(String(x.id).replace(/\D/g, '')); if (n > max) max = n; });
+      id = 'C' + ('000' + (max + 1)).slice(-4);
+      sh.appendRow([id, nombre, celular, nota, new Date(), user.email]);
+    }
+  } finally {
+    lock.releaseLock();
+  }
+  return { ok: true, id: id, clients: clientsWithBalance_() };
+}
+
+function addPayment_(user, req) {
+  const valor = Math.round(Number(req.valor));
+  if (!(valor > 0)) fail_('Escribe el valor del abono.');
+  const metodo = PAY_METHODS.indexOf(req.metodo) >= 0 && req.metodo !== FIADO ? req.metodo : 'Efectivo';
+  const client = findClient_(String(req.cliente_id || ''));
+  if (!client) fail_('Cliente no encontrado.');
+  const nota = safeText_(String(req.nota || '').trim()).slice(0, 120);
+  sheet_(SH.PAYMENTS).appendRow([new Date(), client.id, client.nombre, valor, metodo, user.email, nota]);
+  const clients = clientsWithBalance_();
+  const saldo = (clients.filter(function (c) { return c.id === client.id; })[0] || {}).saldo || 0;
+  return { ok: true, saldo: saldo, clients: clients };
+}
+
+/** Historial de un cliente: compras fiadas y abonos, más recientes primero. */
+function clientDetail_(req) {
+  const id = String(req.cliente_id || '');
+  const client = findClient_(id);
+  if (!client) fail_('Cliente no encontrado.');
+  const items = {};
+  const sales = sheet_(SH.SALES).getDataRange().getValues();
+  for (let i = 1; i < sales.length; i++) {
+    const r = sales[i];
+    if (String(r[12]) !== id) continue;
+    const k = String(r[0]);
+    if (!items[k]) items[k] = { tipo: 'compra', fecha: Utilities.formatDate(asDate_(r[1]), TZ, 'yyyy-MM-dd HH:mm'), metodo: String(r[9]), estado: String(r[11]), detalle: [], valor: 0 };
+    items[k].detalle.push(r[6] + ' × ' + r[5]);
+    items[k].valor += Number(r[8]) || 0;
+  }
+  const list = Object.keys(items).map(function (k) { return items[k]; });
+  const pays = sheet_(SH.PAYMENTS).getDataRange().getValues();
+  for (let j = 1; j < pays.length; j++) {
+    if (String(pays[j][1]) !== id) continue;
+    list.push({ tipo: 'abono', fecha: Utilities.formatDate(asDate_(pays[j][0]), TZ, 'yyyy-MM-dd HH:mm'), metodo: String(pays[j][4]), valor: Number(pays[j][3]) || 0, detalle: [String(pays[j][6] || '')] });
+  }
+  list.sort(function (a, b) { return a.fecha < b.fecha ? 1 : -1; });
+  balancesMemo_ = null;
+  return { ok: true, cliente: { id: client.id, nombre: client.nombre, celular: client.celular, saldo: balances_()[id] || 0 }, historial: list.slice(0, 60) };
+}
+
 /* ─────────────────────────────── Utilidades ─────────────────────────────── */
 
+const checkedSheets_ = {};
+/** Devuelve la pestaña; si falta (o le faltan columnas nuevas) la crea/completa con sus encabezados. */
 function sheet_(name) {
-  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
-  if (!sh) fail_('Falta la pestaña "' + name + '". Ejecuta setup().');
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sh = ss.getSheetByName(name);
+  const head = HEADERS[name];
+  if (!sh) {
+    if (!head) fail_('Falta la pestaña "' + name + '".');
+    sh = ss.insertSheet(name);
+    sh.getRange(1, 1, 1, head.length).setValues([head]);
+    sh.setFrozenRows(1);
+    if (name === SH.CLIENTS) sh.getRange(2, 3, 1000, 1).setNumberFormat('@');
+  } else if (head && !checkedSheets_[name]) {
+    const cur = sh.getRange(1, 1, 1, head.length).getValues()[0];
+    if (cur.some(function (v, i) { return String(v) === '' && head[i]; })) sh.getRange(1, 1, 1, head.length).setValues([head]);
+  }
+  checkedSheets_[name] = true;
   return sh;
 }
 

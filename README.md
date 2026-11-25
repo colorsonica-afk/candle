@@ -3,7 +3,7 @@
 Punto de venta para celular (PWA instalable desde Chrome) para vender velas de Navidad.
 
 - **Usuarias:** 3, todas con rol `admin` (venden, cambian precios, agregan productos y ajustan inventario).
-- **Acceso:** correo + PIN de 4 dígitos, validado en el servidor, **una sola vez por celular**: la sesión queda abierta aunque se cierre la app o se apague el teléfono, y sin internet abre con los últimos datos guardados. Se cierra solo con “Cerrar sesión”, poniendo `activo` en FALSE en la hoja, o tras un año sin uso. 5 intentos fallidos bloquean 15 min.
+- **Acceso:** correo + llave (PIN) de 4 dígitos, validado en el servidor, **una sola vez por celular**: la sesión queda abierta aunque se cierre la app o se apague el teléfono, y sin internet abre con los últimos datos guardados. Se cierra solo con “Cerrar sesión”, poniendo `activo` en FALSE en la hoja, o tras un año sin uso. 5 intentos fallidos bloquean 15 min.
 - **Datos:** una hoja de Google Sheets (pestañas `usuarios`, `productos`, `ventas`, `movimientos`, `accesos`).
 - **API:** Google Apps Script pegado en esa hoja (`apps-script/Code.gs`).
 - **App:** archivos estáticos en `web/` (se pueden publicar en GitHub Pages o en cualquier hosting HTTPS).
@@ -14,6 +14,13 @@ Punto de venta para celular (PWA instalable desde Chrome) para vender velas de N
 - Agregar productos, registrar entradas y ajustes de inventario, desactivar productos.
 - Informes: Hoy / Semana (lunes a domingo, con gráfico por día) / Total, por producto, por vendedora y por medio de pago. Lista de ventas del día con opción de anular (devuelve las unidades).
 - Stock bajo: banner en la app y correo a las 3 cuando un producto cruza su stock mínimo.
+
+## Clientes, fiado y WhatsApp (paso 2)
+- **Clientes:** pestaña 👥 con nombre, celular y nota. Al vender se elige el cliente (opcional).
+- **Fiado:** medio de pago "📝 Fiado" (exige cliente). El saldo de cada cliente = ventas fiadas no anuladas − abonos. En Clientes se ve el total por cobrar, el historial y se registran abonos.
+- **WhatsApp:** después de cada venta o abono, botón para enviar la cuenta/recibo al WhatsApp del cliente (`wa.me`, número de Colombia +57). En clientes que deben, botón “Cobrar por WhatsApp”.
+- **Archivo maestro:** los admin ven en Cuenta el enlace a la hoja de Google (solo abre para quien tenga permiso en Drive).
+- Las pestañas `clientes` y `abonos` y la columna `cliente_id` de `ventas` se crean solas la primera vez que se usan.
 
 ## Instalación
 

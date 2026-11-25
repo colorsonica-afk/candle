@@ -26,7 +26,10 @@
     view: 'sell',
     scope: 'hoy',
     report: null,
-    pin: ''
+    pin: '',
+    clients: [],
+    clientId: null,     // cliente elegido para la venta actual
+    sheetUrl: null
   };
 
   /* ───────────── API ───────────── */
@@ -102,7 +105,7 @@
     const email = $('#email').value.trim().toLowerCase();
     $('#loginMsg').textContent = '';
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-      $('#loginMsg').textContent = 'Escribe tu correo primero';
+      $('#loginMsg').textContent = 'Escribe tu correo primero 📧';
       S.pin = ''; drawPin(); return;
     }
     try {
@@ -126,6 +129,9 @@
   // la rechaza (cerrar sesión o usuaria desactivada). Sin internet se abre con lo último guardado.
   function enterApp(r) {
     S.user = r.user; S.products = r.products || []; S.payMethods = r.payMethods || S.payMethods;
+    S.clients = r.clients || S.clients || []; S.sheetUrl = r.sheetUrl || null;
+    $('#sheetCard').classList.toggle('hidden', !S.sheetUrl);
+    if (S.sheetUrl) $('#sheetLink').href = S.sheetUrl;
     if (S.payMethods.indexOf(S.metodo) < 0) S.metodo = S.payMethods[0];
     $('#login').classList.add('hidden');
     $('#app').classList.remove('hidden');
@@ -142,7 +148,7 @@
     if (cached && cached.user) enterApp(cached);   // abre al instante con lo último conocido
     try {
       const r = await api('bootstrap', null, { quiet: !!cached });
-      store.set('pos_boot', JSON.stringify({ user: r.user, products: r.products, payMethods: r.payMethods }));
+      saveBoot(r);
       enterApp(r);
     } catch (e) {
       if (e.handled) return;                        // sesión rechazada: ya se mostró el login
@@ -163,7 +169,7 @@
     }
   }
   const isAdmin = () => S.user && S.user.rol === 'admin';
-  const PAY_EMOJI = { Efectivo: '💵', Transferencia: '🏦', Nequi: '📱', Daviplata: '📲', Tarjeta: '💳' };
+  const PAY_EMOJI = { Efectivo: '💵', Transferencia: '🏦', Nequi: '📱', Daviplata: '📲', Tarjeta: '💳', Fiado: '📝' };
   function greetEmoji() { const h = new Date().getHours(); return h < 12 ? '☕🎄' : h < 18 ? '☀️🎁' : '🌙✨'; }
   function prodEmoji(name) {
     const n = String(name).toLowerCase();
@@ -174,14 +180,19 @@
     return '🕯️';
   }
 
+  function saveBoot(r) {
+    store.set('pos_boot', JSON.stringify({ user: r.user || S.user, products: r.products || S.products, payMethods: r.payMethods || S.payMethods,
+      clients: r.clients || S.clients, sheetUrl: r.sheetUrl || S.sheetUrl }));
+  }
   function setProducts(list) {
-    if (list) {
-      S.products = list;
-      if (S.user) store.set('pos_boot', JSON.stringify({ user: S.user, products: list, payMethods: S.payMethods }));
-    }
+    if (list) { S.products = list; if (S.user) saveBoot({}); }
     renderAll();
   }
-  function renderAll() { renderLowStock(); renderProducts(); renderCart(); renderPayMethods(); renderProductAdmin(); }
+  function setClients(list) {
+    if (list) { S.clients = list; if (S.user) saveBoot({}); }
+    renderClientPick(); renderClients();
+  }
+  function renderAll() { renderLowStock(); renderProducts(); renderCart(); renderPayMethods(); renderProductAdmin(); renderClientPick(); renderClients(); }
 
   /* ───────────── Navegación ───────────── */
   $('.tabs').addEventListener('click', (ev) => {
@@ -192,6 +203,7 @@
     $$('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.v === v));
     $$('.view').forEach((s) => s.classList.toggle('hidden', s.id !== 'view-' + v));
     if (v === 'report') loadReport();
+    if (v === 'clients') loadClients();
     window.scrollTo(0, 0);
   }
   $('#btnRefresh').addEventListener('click', async () => {
@@ -331,24 +343,30 @@
   $('#btnCharge').addEventListener('click', () => {
     const ids = Object.keys(S.cart);
     if (!ids.length) return;
+    if (S.metodo === 'Fiado' && !S.clientId) { toast('📝 Para fiar, elige primero el cliente que queda debiendo', true, 3500); openClientPicker(); return; }
+    const cli = S.clients.find((c) => c.id === S.clientId);
     const detail = ids.map((id) => {
       const p = S.products.find((x) => x.id === id);
       return '<tr><td>' + S.cart[id].qty + ' × ' + esc(p.nombre) + '</td><td class="n">' + fmt(S.cart[id].qty * linePrice(id)) + '</td></tr>';
     }).join('');
     openSheet('🎁 Confirmar venta',
+      (cli ? '<p>🙋 <b>' + esc(cli.nombre) + '</b>' + (S.metodo === 'Fiado' ? ' — queda debiendo 📝' : '') + '</p>' : '') +
       '<table class="table">' + detail + '<tr><th>Total · ' + esc(S.metodo) + '</th><th class="n">' + fmt(cartTotal()) + '</th></tr></table>',
       '✅ Registrar venta', async () => {
         const items = ids.map((id) => ({ id: id, qty: S.cart[id].qty, precio: S.cart[id].precio }));
+        const lines = ids.map((id) => ({ nombre: S.products.find((x) => x.id === id).nombre, qty: S.cart[id].qty, valor: S.cart[id].qty * linePrice(id) }));
         try {
-          const r = await api('sell', { items: items, metodo: S.metodo, cliente: $('#cliente').value.trim() });
-          S.cart = {}; $('#cliente').value = '';
+          const r = await api('sell', { items: items, metodo: S.metodo, cliente_id: S.clientId });
+          S.cart = {}; S.clientId = null;
           setProducts(r.products);
           S.report = null;
+          celebrate();
           if (r.alerts && r.alerts.length) {
-            celebrate(); toast('🎉 Venta ' + fmt(r.total) + ' — ⚠️ Se acaba: ' + r.alerts.map((a) => a.nombre + ' (' + a.stock + ')').join(', '), true, 6000);
-          } else {
-            celebrate(); toast('🎉 ¡Venta registrada! ' + fmt(r.total) + ' 🎄');
+            toast('⚠️ Se acaba: ' + r.alerts.map((a) => a.nombre + ' (' + a.stock + ')').join(', '), true, 6000);
           }
+          if (r.cliente) { const c = S.clients.find((x) => x.id === r.cliente.id); if (c) c.saldo = r.cliente.saldo; renderClients(); }
+          showReceipt(r, lines);
+          return false;
         } catch (e) {
           showErr(e);
           try { const b = await api('bootstrap', null, { quiet: true }); setProducts(b.products); } catch (x) { /* ignorar */ }
@@ -393,7 +411,8 @@
       '<div class="kpi"><span>🕯️ Unidades</span><b>' + num.format(b.unidades) + '</b></div>' +
       '<div class="kpi"><span>🧾 Ventas</span><b>' + num.format(b.ventas) + '</b></div>' +
       '<div class="kpi"><span>⭐ Promedio</span><b>' + fmt(b.ventas ? b.total / b.ventas : 0) + '</b></div>' +
-      '</div>';
+      '</div>' +
+      (R.porCobrar ? '<button class="card debt-line" data-goto="clients">💰 Por cobrar (fiado): <b>' + fmt(R.porCobrar) + '</b> ›</button>' : '');
 
     if (sc === 'semana') {
       const max = Math.max.apply(null, R.semanaDias.map((d) => d.total).concat([1]));
@@ -429,6 +448,7 @@
   }
 
   $('#reportBody').addEventListener('click', (ev) => {
+    if (ev.target.closest('[data-goto]')) { go('clients'); return; }
     const b = ev.target.closest('button[data-void]'); if (!b) return;
     const id = b.dataset.void;
     openSheet('¿Anular venta?', '<p>La venta se marca como anulada y las unidades vuelven al inventario.</p>', 'Anular', async () => {
@@ -440,6 +460,161 @@
       } catch (e) { showErr(e); }
     }, true);
   });
+
+  /* ───────────── Clientes, fiado y WhatsApp ───────────── */
+  const STORE = () => CFG.STORE_NAME || 'Sahana';
+  function waUrl(cel, text) {
+    const d = String(cel || '').replace(/\D/g, '');
+    return 'https://wa.me/' + (d ? (d.length === 10 ? '57' + d : d) : '') + '?text=' + encodeURIComponent(text);
+  }
+  function waButton(cel, text, label) {
+    return '<a class="wa-btn" href="' + esc(waUrl(cel, text)) + '" target="_blank" rel="noopener">' + esc(label || '📲 Enviar por WhatsApp') + '</a>';
+  }
+  function saldoText(v) {
+    return v > 0 ? '📝 Debe ' + fmt(v) : v < 0 ? '💚 A favor ' + fmt(-v) : '✅ Al día';
+  }
+
+  function showReceipt(r, lines) {
+    const c = r.cliente;
+    let msg = '🎄 *' + STORE() + ' — Velas de Navidad* 🕯️\n';
+    msg += c ? '¡Hola, ' + c.nombre + '! Este es tu pedido:\n\n' : 'Este es tu pedido:\n\n';
+    msg += lines.map((l) => '• ' + l.qty + ' × ' + l.nombre + ' — ' + fmt(l.valor)).join('\n');
+    msg += '\n\n*Total: ' + fmt(r.total) + '*';
+    if (r.metodo === 'Fiado') {
+      msg += '\n📝 Queda pendiente de pago.';
+      if (c && c.saldo > 0) msg += '\n*Saldo total que debes: ' + fmt(c.saldo) + '*';
+    } else {
+      msg += '\nPago: ' + r.metodo + ' ✅';
+    }
+    msg += '\n\n¡Gracias por tu compra y feliz Navidad! 🎅✨';
+    openSheet('✅ ¡Venta registrada!',
+      '<p class="big-total">' + fmt(r.total) + '</p>' +
+      (c ? '<p>🙋 ' + esc(c.nombre) + (r.metodo === 'Fiado' ? ' · ' + saldoText(c.saldo) : '') + '</p>' : '') +
+      waButton(c && c.celular, msg, c && c.celular ? '📲 Enviar cuenta a ' + c.nombre : '📲 Enviar cuenta por WhatsApp') +
+      (c && !c.celular ? '<p class="muted small">Este cliente no tiene celular guardado: WhatsApp te deja elegir el contacto.</p>' : ''),
+      'Listo 🎄', () => {}, false, true);
+  }
+
+  function renderClientPick() {
+    const c = S.clients.find((x) => x.id === S.clientId);
+    if (S.clientId && !c) S.clientId = null;
+    $('#btnClient').textContent = c ? '🙋 ' + c.nombre + (c.saldo > 0 ? ' · debe ' + fmt(c.saldo) : '') : '👤 Elegir cliente (opcional)';
+    $('#btnClient').classList.toggle('chosen', !!c);
+    $('#btnClientClear').classList.toggle('hidden', !c);
+  }
+  $('#btnClient').addEventListener('click', () => openClientPicker());
+  $('#btnClientClear').addEventListener('click', () => { S.clientId = null; renderClientPick(); });
+
+  function matchClient(c, q) {
+    q = q.trim().toLowerCase();
+    return !q || c.nombre.toLowerCase().indexOf(q) >= 0 || String(c.celular).indexOf(q.replace(/\D/g, '') || '§') >= 0;
+  }
+  function clientRows(list, pick) {
+    if (!list.length) return '<p class="muted">No hay clientes con ese nombre. Créalo con ➕.</p>';
+    return list.map((c) => '<button class="client-item" data-cid="' + esc(c.id) + '"' + (pick ? ' data-pick="1"' : '') + '>' +
+      '<span><b>' + esc(c.nombre) + '</b><small>' + (c.celular ? '📱 ' + esc(c.celular) : 'sin celular') + '</small></span>' +
+      '<span class="saldo ' + (c.saldo > 0 ? 'debe' : '') + '">' + saldoText(c.saldo) + '</span></button>').join('');
+  }
+
+  function openClientPicker() {
+    openSheet('👥 ¿Quién compra?',
+      '<input id="pickSearch" type="search" placeholder="🔎 Buscar nombre o celular" autocomplete="off">' +
+      '<div id="pickList" class="client-list"></div>' +
+      '<button id="pickNew" class="secondary big">➕ Nuevo cliente</button>',
+      'Cerrar', () => {}, false, true);
+    const draw = () => { $('#pickList').innerHTML = clientRows(S.clients.filter((c) => matchClient(c, $('#pickSearch').value)), true); };
+    draw();
+    $('#pickSearch').addEventListener('input', draw);
+    $('#pickList').addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-cid]'); if (!b) return;
+      S.clientId = b.dataset.cid; renderClientPick(); closeSheet();
+    });
+    $('#pickNew').addEventListener('click', () => clientForm(null, $('#pickSearch').value, true));
+  }
+
+  function clientForm(c, prefill, pickAfter) {
+    const guessPhone = prefill && /\d{6,}/.test(prefill) ? prefill.replace(/\D/g, '') : '';
+    const guessName = prefill && !guessPhone ? prefill : '';
+    openSheet(c ? '✏️ Editar cliente' : '➕ Nuevo cliente',
+      '<label class="field"><span>🙋 Nombre</span><input id="cName" maxlength="80" value="' + esc(c ? c.nombre : guessName) + '" placeholder="Ej: Doña Rosa"></label>' +
+      '<label class="field"><span>📱 Celular (WhatsApp)</span><input id="cPhone" type="tel" inputmode="tel" maxlength="16" value="' + esc(c ? c.celular : guessPhone) + '" placeholder="300 123 4567"></label>' +
+      '<label class="field"><span>📝 Nota (opcional)</span><input id="cNote" maxlength="120" value="' + esc(c ? c.nota : '') + '" placeholder="Ej: vecina del 302"></label>',
+      'Guardar', async () => {
+        const nombre = $('#cName').value.trim();
+        if (!nombre) { toast('Escribe el nombre', true); return false; }
+        try {
+          const r = await api('saveClient', { client: { id: c ? c.id : undefined, nombre: nombre, celular: $('#cPhone').value, nota: $('#cNote').value } });
+          setClients(r.clients);
+          if (pickAfter) { S.clientId = r.id; renderClientPick(); }
+          toast('🙋 Cliente guardado ✓');
+        } catch (e) { showErr(e); return false; }
+      });
+  }
+
+  async function loadClients() {
+    try { const r = await api('clients', null, { quiet: S.clients.length > 0 }); setClients(r.clients); } catch (e) { showErr(e); }
+  }
+  function renderClients() {
+    if (!$('#clientList')) return;
+    const total = S.clients.reduce((t, c) => t + (c.saldo > 0 ? c.saldo : 0), 0);
+    $('#debtTotal').textContent = fmt(total);
+    const list = S.clients.filter((c) => matchClient(c, $('#clientSearch').value));
+    $('#clientList').innerHTML = S.clients.length ? clientRows(list, false) : '<p class="muted center">Aún no hay clientes. ¡Crea el primero! 🎅</p>';
+  }
+  $('#clientSearch').addEventListener('input', renderClients);
+  $('#btnNewClient').addEventListener('click', () => clientForm(null, $('#clientSearch').value, false));
+  $('#clientList').addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-cid]'); if (b) openClient(b.dataset.cid);
+  });
+
+  async function openClient(id) {
+    let r;
+    try { r = await api('clientDetail', { cliente_id: id }); } catch (e) { showErr(e); return; }
+    const c = Object.assign({}, S.clients.find((x) => x.id === id) || {}, r.cliente);
+    const cobro = '🎄 *' + STORE() + '* 🕯️\nHola, ' + c.nombre + '. Te recuerdo con cariño tu saldo pendiente de velas: *' + fmt(c.saldo) +
+      '*.\nPuedes pagar por Nequi, Daviplata o en efectivo. ¡Gracias y feliz Navidad! 🎅';
+    const hist = r.historial.length ? r.historial.map((h) =>
+      '<div class="hist ' + h.tipo + (h.estado === 'anulada' ? ' void' : '') + '"><span>' + (h.tipo === 'abono' ? '💵 Abono' : (h.metodo === 'Fiado' ? '📝 Fiado' : '🛍️ Compra')) +
+      ' · ' + esc(h.fecha.slice(5)) + (h.estado === 'anulada' ? ' · anulada' : '') + '<small>' + esc(h.detalle.filter(Boolean).join(', ') || (h.metodo || '')) + '</small></span>' +
+      '<b>' + (h.tipo === 'abono' ? '−' : '') + fmt(h.valor) + '</b></div>').join('') : '<p class="muted">Sin movimientos todavía.</p>';
+    openSheet('🙋 ' + c.nombre,
+      '<p class="big-total ' + (c.saldo > 0 ? 'debe' : '') + '">' + saldoText(c.saldo) + '</p>' +
+      (c.celular ? '<p class="muted">📱 ' + esc(c.celular) + '</p>' : '') +
+      '<div class="row wrap">' +
+      (c.saldo > 0 ? '<button id="cPay" class="secondary">💵 Registrar abono</button>' : '') +
+      '<button id="cSell" class="secondary">🛍️ Venderle</button><button id="cEdit" class="ghost">✏️ Editar</button></div>' +
+      (c.saldo > 0 ? waButton(c.celular, cobro, '📲 Cobrar por WhatsApp') : '') +
+      '<h2 style="margin-top:16px">🧾 Historial</h2>' + hist,
+      'Cerrar', () => {}, false, true);
+    if ($('#cPay')) $('#cPay').addEventListener('click', () => payForm(c));
+    $('#cSell').addEventListener('click', () => { S.clientId = c.id; renderClientPick(); closeSheet(); go('sell'); });
+    $('#cEdit').addEventListener('click', () => clientForm(c, '', false));
+  }
+
+  function payForm(c) {
+    const methods = S.payMethods.filter((m) => m !== 'Fiado');
+    openSheet('💵 Abono de ' + c.nombre,
+      '<p class="muted">Debe ' + fmt(c.saldo) + '</p>' +
+      '<label class="field"><span>Valor del abono</span><input id="pVal" type="number" inputmode="numeric" min="1" value="' + c.saldo + '"></label>' +
+      '<div class="field"><span>¿Cómo pagó?</span><div class="chips" id="pMet">' +
+      methods.map((m, i) => '<button data-m="' + esc(m) + '" class="' + (i ? '' : 'on') + '">' + (PAY_EMOJI[m] || '') + ' ' + esc(m) + '</button>').join('') + '</div></div>',
+      'Guardar abono', async () => {
+        const v = Math.round(Number($('#pVal').value));
+        if (!(v > 0)) { toast('Escribe el valor', true); return false; }
+        try {
+          const r = await api('addPayment', { cliente_id: c.id, valor: v, metodo: $('#pMet .on').dataset.m });
+          setClients(r.clients); S.report = null; celebrate();
+          const msg = '🎄 *' + STORE() + '* 🕯️\n¡Gracias, ' + c.nombre + '! Recibimos tu abono de *' + fmt(v) + '*.\n' +
+            (r.saldo > 0 ? 'Saldo pendiente: *' + fmt(r.saldo) + '*' : '✅ ¡Quedaste al día!') + '\n¡Feliz Navidad! 🎅';
+          openSheet('✅ Abono registrado', '<p class="big-total">' + saldoText(r.saldo) + '</p>' + waButton(c.celular, msg, '📲 Enviar recibo por WhatsApp'), 'Listo 🎄', () => {}, false, true);
+          return false;
+        } catch (e) { showErr(e); return false; }
+      });
+    $('#pMet').addEventListener('click', (ev) => {
+      const b = ev.target.closest('button'); if (!b) return;
+      $$('#pMet button').forEach((x) => x.classList.toggle('on', x === b));
+    });
+  }
 
   /* ───────────── Productos ───────────── */
   function renderProductAdmin() {
@@ -513,11 +688,11 @@
   /* ───────────── Cuenta ───────────── */
   $('#btnPin').addEventListener('click', async () => {
     const a = $('#pinOld').value, n = $('#pinNew').value;
-    if (!/^\d{4}$/.test(a) || !/^\d{4}$/.test(n)) { toast('Los PIN deben tener 4 dígitos', true); return; }
+    if (!/^\d{4}$/.test(a) || !/^\d{4}$/.test(n)) { toast('La llave debe tener 4 dígitos', true); return; }
     try {
       await api('changePin', { actual: a, nueva: n });
       $('#pinOld').value = ''; $('#pinNew').value = '';
-      toast('🔑 PIN cambiado ✓');
+      toast('🔑 Llave cambiada ✓');
     } catch (e) { showErr(e); }
   });
   $('#btnLogout').addEventListener('click', async () => {
@@ -542,7 +717,8 @@
 
   /* ───────────── Hoja de diálogo ───────────── */
   let sheetAction = null;
-  function openSheet(title, body, okText, onOk, danger) {
+  function openSheet(title, body, okText, onOk, danger, hideCancel) {
+    $('#sheetCancel').classList.toggle('hidden', !!hideCancel);
     $('#sheetTitle').textContent = title;
     $('#sheetBody').innerHTML = body;
     const ok = $('#sheetOk');
@@ -598,9 +774,9 @@
   makeSnow();
 
   /* ───────────── Inicio ───────────── */
-  if (CFG.STORE_NAME) { $('#storeName').textContent = CFG.STORE_NAME; $('#hdrStore').textContent = '🎄 ' + CFG.STORE_NAME; }
+  if (CFG.STORE_NAME) { $('#storeName').textContent = CFG.STORE_NAME; $('#hdrStore').textContent = '🎄 ' + CFG.STORE_NAME; document.title = '🎄 ' + CFG.STORE_NAME; }
   // Pedir a Chrome que no borre los datos de la app (la sesión) aunque falte espacio.
-  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}, false, true);
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {}, false, true);
   if (S.token) start(); else showLogin();
 })();
