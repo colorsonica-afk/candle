@@ -42,7 +42,7 @@ const USUARIOS_INICIALES = [
   // ['correo@gmail.com', 'Nombre'],
 ];
 
-const PAY_METHODS = ['Efectivo', 'Transferencia', 'Nequi', 'Daviplata', 'Tarjeta', 'Fiado'];
+const PAY_METHODS = ['Efectivo', 'Llave', 'Transferencia', 'Nequi', 'Daviplata', 'Tarjeta', 'Fiado'];
 const FIADO = 'Fiado';
 const STORE_NAME = 'Sahana';
 
@@ -145,7 +145,7 @@ function login_(req) {
   const email = String(req.email || '').trim().toLowerCase();
   const pin = String(req.pin || '');
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || !/^\d{4}$/.test(pin)) {
-    return { ok: false, msg: 'Correo o llave inválida' };
+    return { ok: false, msg: 'Correo o PIN inválido' };
   }
   const cache = CacheService.getScriptCache();
   const failKey = 'f:' + email;
@@ -177,7 +177,7 @@ function login_(req) {
   if (!okPin) {
     cache.put(failKey, String(fails + 1), LOCK_SECONDS);
     logAccess_(email, 'fallido');
-    return { ok: false, msg: 'Correo o llave incorrecta' };
+    return { ok: false, msg: 'Correo o PIN incorrecto' };
   }
 
   cache.remove(failKey);
@@ -266,14 +266,14 @@ function hashPin_(email, pin) {
 
 function changePin_(user, req) {
   const actual = String(req.actual || ''), nueva = String(req.nueva || '');
-  if (!/^\d{4}$/.test(nueva)) fail_('La nueva llave debe tener 4 dígitos.');
+  if (!/^\d{4}$/.test(nueva)) fail_('El nuevo PIN debe tener 4 dígitos.');
   const sh = sheet_(SH.USERS);
   const rows = sh.getDataRange().getValues();
   for (let i = 1; i < rows.length; i++) {
     if (String(rows[i][0]).trim().toLowerCase() === user.email) {
       const stored = String(rows[i][2]).trim();
       const ok = stored.indexOf('h:') === 0 ? stored === hashPin_(user.email, actual) : ('0000' + stored).slice(-4) === actual;
-      if (!ok) fail_('La llave actual no es correcta.');
+      if (!ok) fail_('El PIN actual no es correcto.');
       sh.getRange(i + 1, 3).setValue(hashPin_(user.email, nueva));
       return { ok: true };
     }

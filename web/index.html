@@ -27,7 +27,7 @@
         <input id="email" type="email" inputmode="email" autocomplete="username" placeholder="tucorreo@gmail.com">
       </label>
       <div class="field">
-        <span>🔑 Llave de 4 dígitos</span>
+        <span>🔒 PIN de 4 dígitos</span>
         <div class="pin-dots" id="pinDots" aria-live="polite"><i></i><i></i><i></i><i></i></div>
       </div>
       <div class="keypad" id="keypad">
@@ -111,11 +111,11 @@
         <div class="card">
           <h2>🎅 Mi cuenta</h2>
           <p id="accInfo" class="muted"></p>
-          <label class="field"><span>🔑 Llave actual</span>
+          <label class="field"><span>🔒 PIN actual</span>
             <input id="pinOld" type="password" inputmode="numeric" maxlength="4" pattern="\d{4}" autocomplete="current-password"></label>
-          <label class="field"><span>🔑 Llave nueva</span>
+          <label class="field"><span>🔒 PIN nuevo</span>
             <input id="pinNew" type="password" inputmode="numeric" maxlength="4" pattern="\d{4}" autocomplete="new-password"></label>
-          <button id="btnPin" class="secondary">🔑 Cambiar llave</button>
+          <button id="btnPin" class="secondary">🔒 Cambiar PIN</button>
         </div>
         <div id="sheetCard" class="card hidden">
           <h2>📄 Archivo maestro</h2>
@@ -155,6 +155,6 @@
   <div id="busy" class="busy hidden"><div class="spinner"></div></div>
 
   <script src="config.js?v=5"></script>
-  <script src="app.js?v=6"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>

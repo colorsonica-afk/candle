@@ -1,5 +1,5 @@
 // Guarda solo la "cáscara" de la app para abrir rápido. Los datos nunca se guardan en caché.
-const CACHE = 'velas-pos-v6';
+const CACHE = 'velas-pos-v7';
 const SHELL = ['./', './index.html', './styles.css', './app.js', './config.js', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png'];
 

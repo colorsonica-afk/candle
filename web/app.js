@@ -169,7 +169,7 @@
     }
   }
   const isAdmin = () => S.user && S.user.rol === 'admin';
-  const PAY_EMOJI = { Efectivo: '💵', Transferencia: '🏦', Nequi: '📱', Daviplata: '📲', Tarjeta: '💳', Fiado: '📝' };
+  const PAY_EMOJI = { Efectivo: '💵', Transferencia: '🏦', Nequi: '📱', Daviplata: '📲', Tarjeta: '💳', Fiado: '📝', Llave: '🔑' };
   function greetEmoji() { const h = new Date().getHours(); return h < 12 ? '☕🎄' : h < 18 ? '☀️🎁' : '🌙✨'; }
   function prodEmoji(name) {
     const n = String(name).toLowerCase();
@@ -572,7 +572,7 @@
     try { r = await api('clientDetail', { cliente_id: id }); } catch (e) { showErr(e); return; }
     const c = Object.assign({}, S.clients.find((x) => x.id === id) || {}, r.cliente);
     const cobro = '🎄 *' + STORE() + '* 🕯️\nHola, ' + c.nombre + '. Te recuerdo con cariño tu saldo pendiente de velas: *' + fmt(c.saldo) +
-      '*.\nPuedes pagar por Nequi, Daviplata o en efectivo. ¡Gracias y feliz Navidad! 🎅';
+      '*.\nPuedes pagar con llave 🔑, Nequi, Daviplata o en efectivo. ¡Gracias y feliz Navidad! 🎅';
     const hist = r.historial.length ? r.historial.map((h) =>
       '<div class="hist ' + h.tipo + (h.estado === 'anulada' ? ' void' : '') + '"><span>' + (h.tipo === 'abono' ? '💵 Abono' : (h.metodo === 'Fiado' ? '📝 Fiado' : '🛍️ Compra')) +
       ' · ' + esc(h.fecha.slice(5)) + (h.estado === 'anulada' ? ' · anulada' : '') + '<small>' + esc(h.detalle.filter(Boolean).join(', ') || (h.metodo || '')) + '</small></span>' +
@@ -688,11 +688,11 @@
   /* ───────────── Cuenta ───────────── */
   $('#btnPin').addEventListener('click', async () => {
     const a = $('#pinOld').value, n = $('#pinNew').value;
-    if (!/^\d{4}$/.test(a) || !/^\d{4}$/.test(n)) { toast('La llave debe tener 4 dígitos', true); return; }
+    if (!/^\d{4}$/.test(a) || !/^\d{4}$/.test(n)) { toast('El PIN debe tener 4 dígitos', true); return; }
     try {
       await api('changePin', { actual: a, nueva: n });
       $('#pinOld').value = ''; $('#pinNew').value = '';
-      toast('🔑 Llave cambiada ✓');
+      toast('🔒 PIN cambiado ✓');
     } catch (e) { showErr(e); }
   });
   $('#btnLogout').addEventListener('click', async () => {
