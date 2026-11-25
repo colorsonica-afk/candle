@@ -29,7 +29,9 @@
     pin: '',
     clients: [],
     clientId: null,     // cliente elegido para la venta actual
-    sheetUrl: null
+    sheetUrl: null,
+    entrega: 'entregado',
+    orders: null
   };
 
   /* ───────────── API ───────────── */
@@ -140,6 +142,7 @@
     $('#btnNewProduct').classList.toggle('hidden', !isAdmin());
     renderAll();
     go(S.view);
+    if (!S.orders) loadOrders(true);
   }
 
   async function start() {
@@ -204,6 +207,7 @@
     $$('.view').forEach((s) => s.classList.toggle('hidden', s.id !== 'view-' + v));
     if (v === 'report') loadReport();
     if (v === 'clients') loadClients();
+    if (v === 'orders') loadOrders();
     window.scrollTo(0, 0);
   }
   $('#btnRefresh').addEventListener('click', async () => {
@@ -351,13 +355,15 @@
     }).join('');
     openSheet('🎁 Confirmar venta',
       (cli ? '<p>🙋 <b>' + esc(cli.nombre) + '</b>' + (S.metodo === 'Fiado' ? ' — queda debiendo 📝' : '') + '</p>' : '') +
-      '<table class="table">' + detail + '<tr><th>Total · ' + esc(S.metodo) + '</th><th class="n">' + fmt(cartTotal()) + '</th></tr></table>',
+      '<table class="table">' + detail + '<tr><th>Total · ' + esc(S.metodo) + '</th><th class="n">' + fmt(cartTotal()) + '</th></tr></table>' +
+      '<p>' + (S.entrega === 'en proceso' ? '⏳ Pedido <b>en proceso</b> (queda pendiente por entregar)' : '✅ Se entrega ya') + '</p>',
       '✅ Registrar venta', async () => {
         const items = ids.map((id) => ({ id: id, qty: S.cart[id].qty, precio: S.cart[id].precio }));
         const lines = ids.map((id) => ({ nombre: S.products.find((x) => x.id === id).nombre, qty: S.cart[id].qty, valor: S.cart[id].qty * linePrice(id) }));
         try {
-          const r = await api('sell', { items: items, metodo: S.metodo, cliente_id: S.clientId });
-          S.cart = {}; S.clientId = null;
+          const r = await api('sell', { items: items, metodo: S.metodo, cliente_id: S.clientId, entrega: S.entrega });
+          S.cart = {}; S.clientId = null; S.orders = null; setEntrega('entregado');
+          loadOrders(true);
           setProducts(r.products);
           S.report = null;
           celebrate();
@@ -437,7 +443,7 @@
     if (sc === 'hoy') {
       html += '<div class="card"><h2>🧾 Ventas de hoy</h2>' + (R.ventasHoy.length ? R.ventasHoy.map((v) =>
         '<div class="sale' + (v.estado === 'anulada' ? ' void' : '') + '">' +
-        '<div><b>' + esc(v.hora) + '</b> · ' + esc(v.vendedor) + ' · ' + esc(v.metodo) + (v.cliente ? ' · ' + esc(v.cliente) : '') + '</div>' +
+        '<div><b>' + esc(v.hora) + '</b> · ' + esc(v.vendedor) + ' · ' + esc(v.metodo) + (v.cliente ? ' · ' + esc(v.cliente) : '') + (v.entrega === 'en proceso' && v.estado !== 'anulada' ? ' · ⏳ en proceso' : '') + '</div>' +
         '<div class="stot">' + fmt(v.total) + '</div>' +
         '<div class="sdet">' + v.items.map((i) => esc(i.cantidad + ' × ' + i.producto + ' a ' + fmt(i.precio))).join('<br>') + '</div>' +
         (v.estado === 'anulada' ? '<div class="svoid">Anulada</div>' : (isAdmin() ? '<button class="svoid" data-void="' + esc(v.venta_id) + '">Anular</button>' : '<div></div>')) +
@@ -486,6 +492,7 @@
     } else {
       msg += '\nPago: ' + r.metodo + ' ✅';
     }
+    if (r.entrega === 'en proceso') msg += '\n\n⏳ Tu pedido está *en proceso*. Te avisamos cuando esté listo para entregar.';
     msg += '\n\n¡Gracias por tu compra y feliz Navidad! 🎅✨';
     openSheet('✅ ¡Venta registrada!',
       '<p class="big-total">' + fmt(r.total) + '</p>' +
@@ -575,8 +582,10 @@
       '*.\nPuedes pagar con llave 🔑, Nequi, Daviplata o en efectivo. ¡Gracias y feliz Navidad! 🎅';
     const hist = r.historial.length ? r.historial.map((h) =>
       '<div class="hist ' + h.tipo + (h.estado === 'anulada' ? ' void' : '') + '"><span>' + (h.tipo === 'abono' ? '💵 Abono' : (h.metodo === 'Fiado' ? '📝 Fiado' : '🛍️ Compra')) +
-      ' · ' + esc(h.fecha.slice(5)) + (h.estado === 'anulada' ? ' · anulada' : '') + '<small>' + esc(h.detalle.filter(Boolean).join(', ') || (h.metodo || '')) + '</small></span>' +
-      '<b>' + (h.tipo === 'abono' ? '−' : '') + fmt(h.valor) + '</b></div>').join('') : '<p class="muted">Sin movimientos todavía.</p>';
+      ' · ' + esc(h.fecha.slice(5)) + (h.estado === 'anulada' ? ' · anulada' : '') + '<small>' + esc(h.detalle.filter(Boolean).join(', ') || (h.metodo || '')) + '</small>' +
+      (h.metodo === 'Fiado' && h.tipo === 'compra' && h.estado !== 'anulada'
+        ? (h.pagada ? '<em class="paid">✅ Pagada</em>' : '<button class="mark-paid" data-paid="' + esc(h.venta_id) + '">✅ Marcar pagado</button>') : '') +
+      '</span><b>' + (h.tipo === 'abono' ? '−' : '') + fmt(h.valor) + '</b></div>').join('') : '<p class="muted">Sin movimientos todavía.</p>';
     openSheet('🙋 ' + c.nombre,
       '<p class="big-total ' + (c.saldo > 0 ? 'debe' : '') + '">' + saldoText(c.saldo) + '</p>' +
       (c.celular ? '<p class="muted">📱 ' + esc(c.celular) + '</p>' : '') +
@@ -589,7 +598,79 @@
     if ($('#cPay')) $('#cPay').addEventListener('click', () => payForm(c));
     $('#cSell').addEventListener('click', () => { S.clientId = c.id; renderClientPick(); closeSheet(); go('sell'); });
     $('#cEdit').addEventListener('click', () => clientForm(c, '', false));
+    $$('#sheetBody [data-paid]').forEach((b) => b.addEventListener('click', () => {
+      markPaid(c, r.historial.find((x) => x.venta_id === b.dataset.paid));
+    }));
   }
+
+  function markPaid(c, h) {
+    const methods = S.payMethods.filter((m) => m !== 'Fiado');
+    openSheet('✅ Marcar pagado',
+      '<p>🙋 ' + esc(c.nombre) + ' · fiado del ' + esc(h.fecha.slice(5)) + '</p><p class="big-total">' + fmt(h.valor) + '</p>' +
+      '<div class="field"><span>¿Cómo pagó?</span><div class="chips" id="pMet">' +
+      methods.map((m, i) => '<button data-m="' + esc(m) + '" class="' + (i ? '' : 'on') + '">' + (PAY_EMOJI[m] || '') + ' ' + esc(m) + '</button>').join('') + '</div></div>',
+      'Confirmar pago', async () => {
+        try {
+          const r = await api('payFiado', { venta_id: h.venta_id, metodo: $('#pMet .on').dataset.m });
+          setClients(r.clients); S.report = null; celebrate();
+          const msg = '🎄 *' + STORE() + '* 🕯️\n¡Gracias, ' + c.nombre + '! Recibimos el pago de *' + fmt(h.valor) + '*.\n' +
+            (r.cliente.saldo > 0 ? 'Saldo pendiente: *' + fmt(r.cliente.saldo) + '*' : '✅ ¡Quedaste al día!') + '\n¡Feliz Navidad! 🎅';
+          openSheet('✅ ¡Pagado!', '<p class="big-total">' + saldoText(r.cliente.saldo) + '</p>' + waButton(c.celular, msg, '📲 Enviar recibo por WhatsApp'), 'Listo 🎄', () => {}, false, true);
+          return false;
+        } catch (e) { showErr(e); return false; }
+      });
+    $('#pMet').addEventListener('click', (ev) => {
+      const b = ev.target.closest('button'); if (!b) return;
+      $$('#pMet button').forEach((x) => x.classList.toggle('on', x === b));
+    });
+  }
+
+  /* ───────────── Pedidos (entrega) ───────────── */
+  function setEntrega(v) {
+    S.entrega = v;
+    $$('#deliveryOpts button').forEach((b) => b.classList.toggle('on', b.dataset.e === v));
+  }
+  $('#deliveryOpts').addEventListener('click', (ev) => {
+    const b = ev.target.closest('button'); if (b) setEntrega(b.dataset.e);
+  });
+
+  async function loadOrders(quiet) {
+    try { S.orders = await api('orders', null, { quiet: !!quiet || !!S.orders }); renderOrders(); } catch (e) { if (!quiet) showErr(e); }
+  }
+  function orderCard(o, pending) {
+    const items = o.items.map((i) => i.cantidad + ' × ' + i.producto).join(', ');
+    const listo = '🎄 *' + STORE() + '* 🕯️\nHola' + (o.cliente ? ', ' + o.cliente : '') + '. ¡Tu pedido está listo! 🎁\n' + items +
+      '\nTotal: *' + fmt(o.total) + '*' + (o.metodo === 'Fiado' ? ' (pendiente de pago)' : '') + '\n¡Feliz Navidad! 🎅';
+    return '<div class="card order ' + (pending ? 'pending' : 'done') + '">' +
+      '<div class="order-top"><b>' + (o.cliente ? '🙋 ' + esc(o.cliente) : '🛍️ Sin cliente') + '</b><b>' + fmt(o.total) + '</b></div>' +
+      '<div class="muted small">' + esc(o.fecha.slice(5)) + ' · ' + esc(o.vendedor) + ' · ' + (PAY_EMOJI[o.metodo] || '') + ' ' + esc(o.metodo) +
+      (!pending && o.entregado_fecha ? ' · entregado ' + esc(o.entregado_fecha.slice(5)) : '') + '</div>' +
+      '<div class="order-items">' + esc(items) + '</div>' +
+      (pending
+        ? '<div class="row"><button class="primary" data-deliver="' + esc(o.venta_id) + '">✅ Marcar entregado</button></div>' + waButton(o.celular, listo, '📲 Avisar que está listo')
+        : '<button class="ghost small-btn" data-undo="' + esc(o.venta_id) + '">↩️ Volver a en proceso</button>') +
+      '</div>';
+  }
+  function renderOrders() {
+    const O = S.orders; if (!O) return;
+    const n = O.enProceso.length;
+    $('#ordersBadge').textContent = n; $('#ordersBadge').classList.toggle('hidden', !n);
+    $('#ordersBody').innerHTML =
+      '<h2>⏳ En proceso (' + n + ')</h2>' +
+      (n ? O.enProceso.map((o) => orderCard(o, true)).join('') : '<p class="muted card">🎉 No hay pedidos pendientes por entregar.</p>') +
+      '<h2 style="margin-top:18px">✅ Entregados recientes</h2>' +
+      (O.entregados.length ? O.entregados.map((o) => orderCard(o, false)).join('') : '<p class="muted">Aún no hay entregas registradas.</p>');
+  }
+  $('#ordersBody').addEventListener('click', async (ev) => {
+    const d = ev.target.closest('[data-deliver]'), u = ev.target.closest('[data-undo]');
+    if (!d && !u) return;
+    try {
+      S.orders = await api('setDelivery', { venta_id: d ? d.dataset.deliver : u.dataset.undo, estado: d ? 'entregado' : 'en proceso' });
+      renderOrders(); S.report = null;
+      if (d) { celebrate(); toast('🎁 ¡Pedido entregado!'); } else toast('⏳ Volvió a en proceso');
+    } catch (e) { showErr(e); }
+  });
+
 
   function payForm(c) {
     const methods = S.payMethods.filter((m) => m !== 'Fiado');

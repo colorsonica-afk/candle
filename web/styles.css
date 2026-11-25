@@ -316,3 +316,23 @@ h1, h2, .topbar strong { font-family: Georgia, "Times New Roman", serif; letter-
 .hist.void { opacity: .5; text-decoration: line-through; }
 /* el aviso flotante va arriba para no tapar botones de las hojas */
 .toast { bottom: auto; top: calc(84px + env(safe-area-inset-top)); }
+
+/* ───────────── Pedidos ───────────── */
+.tabs { grid-template-columns: repeat(6, 1fr); }
+.tabs button { font-size: .64rem; position: relative; }
+.tab-badge {
+  position: absolute; top: 4px; right: 18%; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+  background: var(--red); color: #fff; font-style: normal; font-size: .7rem; font-weight: 700; line-height: 18px;
+}
+.order.pending { border-left: 5px solid var(--gold); }
+.order.done { opacity: .8; }
+.order-top { display: flex; justify-content: space-between; gap: 10px; font-size: 1.05rem; }
+.order-items { margin: 8px 0 4px; }
+.order .row { margin-top: 10px; }
+.small-btn { margin-top: 8px; min-height: 38px; font-size: .85rem; padding: 6px 12px; }
+.mark-paid {
+  display: inline-block; margin-top: 6px; padding: 6px 10px; border-radius: 8px; font-size: .82rem; font-weight: 700;
+  background: #2e7d4f; color: #fff;
+}
+.paid { display: block; margin-top: 4px; font-style: normal; font-size: .82rem; font-weight: 700; color: #2e7d4f; }
+#ordersBody h2 { margin: 4px 0 10px; }

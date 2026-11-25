@@ -30,7 +30,7 @@ const SH = {
 const HEADERS = {
   usuarios: ['email', 'nombre', 'pin', 'rol', 'activo'],
   productos: ['id', 'nombre', 'precio', 'stock', 'stock_minimo', 'activo', 'actualizado'],
-  ventas: ['venta_id', 'fecha', 'email', 'vendedor', 'producto_id', 'producto', 'cantidad', 'precio_unit', 'total', 'metodo_pago', 'cliente', 'estado', 'cliente_id'],
+  ventas: ['venta_id', 'fecha', 'email', 'vendedor', 'producto_id', 'producto', 'cantidad', 'precio_unit', 'total', 'metodo_pago', 'cliente', 'estado', 'cliente_id', 'entrega', 'entregado_fecha'],
   movimientos: ['fecha', 'email', 'producto_id', 'producto', 'tipo', 'cantidad', 'stock_resultante', 'nota'],
   accesos: ['fecha', 'email', 'resultado'],
   clientes: ['id', 'nombre', 'celular', 'nota', 'creado', 'creado_por'],
@@ -44,6 +44,7 @@ const USUARIOS_INICIALES = [
 
 const PAY_METHODS = ['Efectivo', 'Llave', 'Transferencia', 'Nequi', 'Daviplata', 'Tarjeta', 'Fiado'];
 const FIADO = 'Fiado';
+const EN_PROCESO = 'en proceso', ENTREGADO = 'entregado';
 const STORE_NAME = 'Sahana';
 
 /* ───────────────────────── Configuración inicial ───────────────────────── */
@@ -120,6 +121,9 @@ function doPost(e) {
       case 'saveClient': return json_(saveClient_(user, req));
       case 'addPayment': return json_(addPayment_(user, req));
       case 'clientDetail': return json_(clientDetail_(req));
+      case 'orders': return json_(orders_());
+      case 'setDelivery': return json_(setDelivery_(user, req));
+      case 'payFiado': return json_(payFiado_(user, req));
       case 'logout': dropSession_(req.token); return json_({ ok: true });
       default: return json_({ ok: false, msg: 'Acción desconocida' });
     }
@@ -388,6 +392,7 @@ function sell_(user, req) {
     cliente = client.nombre; clienteId = client.id;
   }
   if (metodo === FIADO && !client) fail_('Para fiar, elige el cliente que queda debiendo.');
+  const entrega = req.entrega === EN_PROCESO ? EN_PROCESO : ENTREGADO;
 
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
@@ -427,7 +432,7 @@ function sell_(user, req) {
       const l = lines[k];
       const t = l.qty * l.price;
       total += t; unidades += l.qty;
-      rows.push([ventaId, now, user.email, safeText_(user.nombre), l.p.id, l.p.nombre, l.qty, l.price, t, metodo, cliente, 'ok', clienteId]);
+      rows.push([ventaId, now, user.email, safeText_(user.nombre), l.p.id, l.p.nombre, l.qty, l.price, t, metodo, cliente, 'ok', clienteId, entrega, entrega === ENTREGADO ? now : '']);
     });
     const sales = sheet_(SH.SALES);
     sales.getRange(sales.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
@@ -442,7 +447,7 @@ function sell_(user, req) {
       addMove_(user.email, id, p.nombre, 'venta', -need[id], p.stock, ventaId);
       if (p.stock <= p.stock_minimo && antes > p.stock_minimo) alerts.push(p);
     });
-    result = { ok: true, venta_id: ventaId, total: total, unidades: unidades, metodo: metodo, products: products.map(publicProduct_) };
+    result = { ok: true, venta_id: ventaId, total: total, unidades: unidades, metodo: metodo, entrega: entrega, products: products.map(publicProduct_) };
     if (client) {
       result.cliente = { id: client.id, nombre: client.nombre, celular: client.celular, saldo: balances_()[client.id] || 0 };
     }
@@ -581,6 +586,7 @@ function addToday_(map, r) {
       metodo: String(r[9] || ''),
       cliente: String(r[10] || ''),
       estado: String(r[11] || 'ok'),
+      entrega: String(r[13] || ENTREGADO),
       items: [],
       total: 0
     };
@@ -694,7 +700,7 @@ function clientDetail_(req) {
     const r = sales[i];
     if (String(r[12]) !== id) continue;
     const k = String(r[0]);
-    if (!items[k]) items[k] = { tipo: 'compra', fecha: Utilities.formatDate(asDate_(r[1]), TZ, 'yyyy-MM-dd HH:mm'), metodo: String(r[9]), estado: String(r[11]), detalle: [], valor: 0 };
+    if (!items[k]) items[k] = { tipo: 'compra', venta_id: k, fecha: Utilities.formatDate(asDate_(r[1]), TZ, 'yyyy-MM-dd HH:mm'), metodo: String(r[9]), estado: String(r[11]), entrega: String(r[13] || ENTREGADO), detalle: [], valor: 0 };
     items[k].detalle.push(r[6] + ' × ' + r[5]);
     items[k].valor += Number(r[8]) || 0;
   }
@@ -704,9 +710,98 @@ function clientDetail_(req) {
     if (String(pays[j][1]) !== id) continue;
     list.push({ tipo: 'abono', fecha: Utilities.formatDate(asDate_(pays[j][0]), TZ, 'yyyy-MM-dd HH:mm'), metodo: String(pays[j][4]), valor: Number(pays[j][3]) || 0, detalle: [String(pays[j][6] || '')] });
   }
+  const paid = paidSales_();
+  list.forEach(function (h) { if (h.tipo === 'compra' && h.metodo === FIADO) h.pagada = !!paid[h.venta_id]; });
   list.sort(function (a, b) { return a.fecha < b.fecha ? 1 : -1; });
   balancesMemo_ = null;
   return { ok: true, cliente: { id: client.id, nombre: client.nombre, celular: client.celular, saldo: balances_()[id] || 0 }, historial: list.slice(0, 60) };
+}
+
+/** Ventas fiadas que ya se marcaron como pagadas (abono con venta_id). */
+function paidSales_() {
+  const out = {};
+  const pays = sheet_(SH.PAYMENTS).getDataRange().getValues();
+  for (let j = 1; j < pays.length; j++) { const m = /^Pago venta (V\d+)/.exec(String(pays[j][6] || '')); if (m) out[m[1]] = true; }
+  return out;
+}
+
+/** Marca una venta fiada como pagada: registra un abono por su valor (sin pasar del saldo). */
+function payFiado_(user, req) {
+  const ventaId = String(req.venta_id || '');
+  if (!/^V\d+$/.test(ventaId)) fail_('Venta inválida.');
+  const metodo = PAY_METHODS.indexOf(req.metodo) >= 0 && req.metodo !== FIADO ? req.metodo : 'Efectivo';
+  let cid = '';
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    if (paidSales_()[ventaId]) fail_('Esa venta ya estaba pagada.');
+    const rows = sheet_(SH.SALES).getDataRange().getValues();
+    let total = 0, found = false;
+    for (let i = 1; i < rows.length; i++) {
+      if (String(rows[i][0]) !== ventaId) continue;
+      found = true;
+      if (rows[i][9] !== FIADO) fail_('Esa venta no es fiada.');
+      if (rows[i][11] === 'anulada') fail_('Esa venta está anulada.');
+      total += Number(rows[i][8]) || 0; cid = String(rows[i][12]);
+    }
+    if (!found) fail_('Venta no encontrada.');
+    const client = findClient_(cid);
+    if (!client) fail_('Cliente no encontrado.');
+    balancesMemo_ = null;
+    const saldo = balances_()[cid] || 0;
+    const valor = Math.max(0, Math.min(total, saldo));
+    sheet_(SH.PAYMENTS).appendRow([new Date(), cid, client.nombre, valor, metodo, user.email, 'Pago venta ' + ventaId]);
+  } finally {
+    lock.releaseLock();
+  }
+  const out = clientDetail_({ cliente_id: cid });
+  out.clients = clientsWithBalance_();
+  return out;
+}
+
+/* ─────────────────────────────── Pedidos (entrega) ─────────────────────────────── */
+
+/** Pedidos en proceso (todos) y los últimos entregados. Las ventas viejas sin estado cuentan como entregadas. */
+function orders_() {
+  const rows = sheet_(SH.SALES).getDataRange().getValues();
+  const phones = {};
+  readClients_().forEach(function (c) { phones[c.id] = c.celular; });
+  const map = {}, order = [];
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r[0] || r[11] === 'anulada') continue;
+    const id = String(r[0]);
+    if (!map[id]) {
+      map[id] = { venta_id: id, fecha: Utilities.formatDate(asDate_(r[1]), TZ, 'yyyy-MM-dd HH:mm'), vendedor: String(r[3] || r[2]),
+        metodo: String(r[9] || ''), cliente: String(r[10] || ''), cliente_id: String(r[12] || ''), celular: phones[r[12]] || '',
+        entrega: String(r[13] || ENTREGADO), entregado_fecha: r[14] ? Utilities.formatDate(asDate_(r[14]), TZ, 'yyyy-MM-dd HH:mm') : '', items: [], total: 0 };
+      order.push(id);
+    }
+    map[id].items.push({ producto: String(r[5]), cantidad: Number(r[6]) });
+    map[id].total += Number(r[8]) || 0;
+  }
+  const all = order.map(function (id) { return map[id]; }).reverse();
+  return {
+    ok: true,
+    enProceso: all.filter(function (o) { return o.entrega === EN_PROCESO; }),
+    entregados: all.filter(function (o) { return o.entrega === ENTREGADO && o.entregado_fecha; }).slice(0, 15)
+  };
+}
+
+function setDelivery_(user, req) {
+  const ventaId = String(req.venta_id || '');
+  if (!/^V\d+$/.test(ventaId)) fail_('Venta inválida.');
+  const estado = req.estado === EN_PROCESO ? EN_PROCESO : ENTREGADO;
+  const sh = sheet_(SH.SALES);
+  const rows = sh.getDataRange().getValues();
+  let found = false;
+  for (let i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) !== ventaId) continue;
+    found = true;
+    sh.getRange(i + 1, 14, 1, 2).setValues([[estado, estado === ENTREGADO ? new Date() : '']]);
+  }
+  if (!found) fail_('Venta no encontrada.');
+  return orders_();
 }
 
 /* ─────────────────────────────── Utilidades ─────────────────────────────── */

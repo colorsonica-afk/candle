@@ -19,6 +19,8 @@ Punto de venta para celular (PWA instalable desde Chrome) para vender velas de N
 - **Clientes:** pestaña 👥 con nombre, celular y nota. Al vender se elige el cliente (opcional).
 - **Fiado:** medio de pago "📝 Fiado" (exige cliente). El saldo de cada cliente = ventas fiadas no anuladas − abonos. En Clientes se ve el total por cobrar, el historial y se registran abonos.
 - **WhatsApp:** después de cada venta o abono, botón para enviar la cuenta/recibo al WhatsApp del cliente (`wa.me`, número de Colombia +57). En clientes que deben, botón “Cobrar por WhatsApp”.
+- **Estados de pedido:** al vender se elige ✅ Entregado ya / ⏳ En proceso. La pestaña 📦 Pedidos lista los pendientes (con contador), permite marcarlos entregados y avisar al cliente por WhatsApp. Ventas anteriores sin estado cuentan como entregadas.
+- **Marcar fiado pagado:** en el historial del cliente, cada compra fiada tiene “✅ Marcar pagado”; registra un abono por su valor (sin pasar del saldo) con el medio de pago elegido.
 - **Archivo maestro:** los admin ven en Cuenta el enlace a la hoja de Google (solo abre para quien tenga permiso en Drive).
 - Las pestañas `clientes` y `abonos` y la columna `cliente_id` de `ventas` se crean solas la primera vez que se usan.
 
@@ -55,5 +57,6 @@ Abrir el enlace en Chrome → menú ⋮ → **Instalar app** / “Agregar a la p
 ```
 cd test && node backend.test.js   # API completa contra un emulador de Apps Script
 node e2e.js /tmp                  # recorrido en navegador móvil (requiere Playwright)
+node orders.js /tmp                # pedidos en proceso/entregado y marcar fiado pagado
 node persist.js                   # sesión permanente: reabrir, sin internet, cerrar sesión
 ```

@@ -117,6 +117,28 @@ assert.strictEqual(r.cliente.saldo, 40000);
 // Anular la venta fiada deja saldo a favor
 G.call({ action: 'void', token: TC, venta_id: fiadoVid });
 r = G.call({ action: 'clients', token: TC }); assert.strictEqual(r.clients.find(c => c.id === CID).saldo, -30000);
+// ── Estados de pedido ──
+r = G.call({ action: 'sell', token: TC, items: [{ id: 'P001', qty: 1 }], metodo: 'Nequi', cliente_id: CID, entrega: 'en proceso' });
+const pedido = r.venta_id; assert.strictEqual(r.entrega, 'en proceso');
+r = G.call({ action: 'orders', token: TC });
+assert.strictEqual(r.enProceso.length, 1); assert.strictEqual(r.enProceso[0].celular, '3001234567');
+r = G.call({ action: 'setDelivery', token: TC, venta_id: pedido, estado: 'entregado' });
+assert.strictEqual(r.enProceso.length, 0); assert.ok(r.entregados.some(o => o.venta_id === pedido && o.entregado_fecha));
+// Venta sin estado explícito queda entregada
+r = G.call({ action: 'sell', token: TC, items: [{ id: 'P001', qty: 1 }], metodo: 'Efectivo' });
+assert.strictEqual(r.entrega, 'entregado');
+// ── Marcar fiado como pagado ──
+r = G.call({ action: 'sell', token: TC, items: [{ id: 'P001', qty: 1 }], metodo: 'Fiado', cliente_id: CID });
+const f2 = r.venta_id; assert.strictEqual(r.cliente.saldo, 5000);  // -30000 a favor + 35000
+r = G.call({ action: 'payFiado', token: TC, venta_id: f2, metodo: 'Llave' });
+assert.ok(r.ok, r.msg); assert.strictEqual(r.cliente.saldo, 0, 'no paga más del saldo');
+assert.ok(r.historial.find(h => h.venta_id === f2).pagada);
+assert.match(G.call({ action: 'payFiado', token: TC, venta_id: f2 }).msg, /ya estaba pagada/);
+r = G.call({ action: 'sell', token: TC, items: [{ id: 'P001', qty: 2 }], metodo: 'Fiado', cliente_id: CID });
+const f3 = r.venta_id; assert.strictEqual(r.cliente.saldo, 70000);
+r = G.call({ action: 'payFiado', token: TC, venta_id: f3, metodo: 'Efectivo' });
+assert.strictEqual(r.cliente.saldo, 0); assert.ok(r.clients);
+assert.match(G.call({ action: 'payFiado', token: TC, venta_id: pedido }).msg, /no es fiada/);
 // Hoja vieja sin pestañas nuevas: se crean solas
 assert.ok(G.sheets.clientes && G.sheets.abonos);
 assert.strictEqual(G.sheets.ventas.data[0][12], 'cliente_id');

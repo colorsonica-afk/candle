@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=6">
+  <link rel="stylesheet" href="styles.css?v=8">
 </head>
 <body>
   <div id="snow" class="snow" aria-hidden="true"></div>
@@ -72,6 +72,13 @@
             <div id="payMethods" class="chips"></div>
           </div>
           <div class="field">
+            <span>📦 Entrega</span>
+            <div id="deliveryOpts" class="chips">
+              <button data-e="entregado" class="on">✅ Entregado ya</button>
+              <button data-e="en proceso">⏳ En proceso</button>
+            </div>
+          </div>
+          <div class="field">
             <span>🙋 Cliente</span>
             <div class="client-row">
               <button id="btnClient" class="client-pick">👤 Elegir cliente (opcional)</button>
@@ -96,6 +103,11 @@
       <section id="view-products" class="view hidden">
         <div id="productAdmin"></div>
         <button id="btnNewProduct" class="secondary big">➕ Agregar producto 🎁</button>
+      </section>
+
+      <!-- PEDIDOS -->
+      <section id="view-orders" class="view hidden">
+        <div id="ordersBody"><p class="muted center">Cargando…</p></div>
       </section>
 
       <!-- CLIENTES -->
@@ -133,6 +145,7 @@
     <nav class="tabs">
       <button data-v="sell" class="on"><span>🕯️</span>Vender</button>
       <button data-v="report"><span>📊</span>Informes</button>
+      <button data-v="orders"><span>📦</span>Pedidos<i id="ordersBadge" class="tab-badge hidden"></i></button>
       <button data-v="clients"><span>👥</span>Clientes</button>
       <button data-v="products"><span>🎁</span>Productos</button>
       <button data-v="account"><span>🎅</span>Cuenta</button>
@@ -155,6 +168,6 @@
   <div id="busy" class="busy hidden"><div class="spinner"></div></div>
 
   <script src="config.js?v=5"></script>
-  <script src="app.js?v=7"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>
