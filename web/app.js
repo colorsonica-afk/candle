@@ -51,7 +51,10 @@
         body: JSON.stringify(Object.assign({ action: action, token: S.token }, data || {})),
         redirect: 'follow'
       });
-      const out = await res.json();
+      let out;
+      try { out = await res.json(); } catch (x) {
+        throw new Error('Google está ocupado en este momento. Espera unos segundos e intenta de nuevo.');
+      }
       if (!out.ok) {
         if (out.code === 'SESSION') { endSession(out.msg); }
         const err = new Error(out.msg || 'Error');
@@ -358,10 +361,15 @@
       '<table class="table">' + detail + '<tr><th>Total · ' + esc(S.metodo) + '</th><th class="n">' + fmt(cartTotal()) + '</th></tr></table>' +
       '<p>' + (S.entrega === 'en proceso' ? '⏳ Pedido <b>en proceso</b> (queda pendiente por entregar)' : '✅ Se entrega ya') + '</p>',
       '✅ Registrar venta', async () => {
-        const items = ids.map((id) => ({ id: id, qty: S.cart[id].qty, precio: S.cart[id].precio }));
+        const items = ids.map((id) => ({ id: id, qty: S.cart[id].qty, precio: S.cart[id].precio,
+          esperado: (S.products.find((x) => x.id === id) || {}).precio }));
+        // Misma venta = misma llave: si se reintenta tras un corte de internet, no se cobra dos veces.
+        const sig = JSON.stringify([items, S.metodo, S.clientId, S.entrega]);
+        if (!S.checkout || S.checkout.sig !== sig) S.checkout = { sig: sig, key: (Date.now().toString(36) + Math.random().toString(36).slice(2, 10)).toLowerCase() };
         const lines = ids.map((id) => ({ nombre: S.products.find((x) => x.id === id).nombre, qty: S.cart[id].qty, valor: S.cart[id].qty * linePrice(id) }));
         try {
-          const r = await api('sell', { items: items, metodo: S.metodo, cliente_id: S.clientId, entrega: S.entrega });
+          const r = await api('sell', { items: items, metodo: S.metodo, cliente_id: S.clientId, entrega: S.entrega, key: S.checkout.key });
+          S.checkout = null;
           S.cart = {}; S.clientId = null; S.orders = null; setEntrega('entregado');
           loadOrders(true);
           setProducts(r.products);
@@ -584,7 +592,9 @@
       '<div class="hist ' + h.tipo + (h.estado === 'anulada' ? ' void' : '') + '"><span>' + (h.tipo === 'abono' ? '💵 Abono' : (h.metodo === 'Fiado' ? '📝 Fiado' : '🛍️ Compra')) +
       ' · ' + esc(h.fecha.slice(5)) + (h.estado === 'anulada' ? ' · anulada' : '') + '<small>' + esc(h.detalle.filter(Boolean).join(', ') || (h.metodo || '')) + '</small>' +
       (h.metodo === 'Fiado' && h.tipo === 'compra' && h.estado !== 'anulada'
-        ? (h.pagada ? '<em class="paid">✅ Pagada</em>' : '<button class="mark-paid" data-paid="' + esc(h.venta_id) + '">✅ Marcar pagado</button>') : '') +
+        ? (h.pagada ? '<em class="paid">✅ Pagada</em>'
+          : (h.pendiente != null && h.pendiente < h.valor ? '<em class="deliv pending">Falta ' + fmt(h.pendiente) + '</em>' : '') +
+            '<button class="mark-paid" data-paid="' + esc(h.venta_id) + '">✅ Marcar pagado</button>') : '') +
       (h.tipo === 'compra' && h.estado !== 'anulada'
         ? (h.entrega === 'en proceso'
           ? '<em class="deliv pending">⏳ En proceso</em><button class="mark-paid" data-deliv="' + esc(h.venta_id) + '" data-to="entregado">✅ Marcar entregado</button>'
@@ -618,15 +628,18 @@
 
   function markPaid(c, h) {
     const methods = S.payMethods.filter((m) => m !== 'Fiado');
+    const falta = Math.max(0, Math.min(h.pendiente != null ? h.pendiente : h.valor, c.saldo));
     openSheet('✅ Marcar pagado',
-      '<p>🙋 ' + esc(c.nombre) + ' · fiado del ' + esc(h.fecha.slice(5)) + '</p><p class="big-total">' + fmt(h.valor) + '</p>' +
+      '<p>🙋 ' + esc(c.nombre) + ' · fiado del ' + esc(h.fecha.slice(5)) + ' por ' + fmt(h.valor) + '</p>' +
+      (falta < h.valor ? '<p class="muted">Ya había abonado ' + fmt(h.valor - falta) + '. Falta:</p>' : '') +
+      '<p class="big-total">' + fmt(falta) + '</p>' +
       '<div class="field"><span>¿Cómo pagó?</span><div class="chips" id="pMet">' +
       methods.map((m, i) => '<button data-m="' + esc(m) + '" class="' + (i ? '' : 'on') + '">' + (PAY_EMOJI[m] || '') + ' ' + esc(m) + '</button>').join('') + '</div></div>',
       'Confirmar pago', async () => {
         try {
           const r = await api('payFiado', { venta_id: h.venta_id, metodo: $('#pMet .on').dataset.m });
           setClients(r.clients); S.report = null; celebrate();
-          const msg = '🎄 *' + STORE() + '* 🕯️\n¡Gracias, ' + c.nombre + '! Recibimos el pago de *' + fmt(h.valor) + '*.\n' +
+          const msg = '🎄 *' + STORE() + '* 🕯️\n¡Gracias, ' + c.nombre + '! Recibimos el pago de *' + fmt(r.valor != null ? r.valor : falta) + '*.\n' +
             (r.cliente.saldo > 0 ? 'Saldo pendiente: *' + fmt(r.cliente.saldo) + '*' : '✅ ¡Quedaste al día!') + '\n¡Feliz Navidad! 🎅';
           openSheet('✅ ¡Pagado!', '<p class="big-total">' + saldoText(r.cliente.saldo) + '</p>' + waButton(c.celular, msg, '📲 Enviar recibo por WhatsApp'), 'Listo 🎄', () => {}, false, true);
           return false;

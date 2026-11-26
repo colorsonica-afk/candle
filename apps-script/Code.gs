@@ -1,5 +1,5 @@
 /**
- * POS Velas de Navidad — backend (Google Apps Script sobre una hoja de cálculo).
+ * POS Velas de Navidad (Sahana) — versión v7 — backend (Google Apps Script sobre una hoja de cálculo).
  *
  * La hoja guarda todo:
  *   usuarios     -> quién puede entrar (correo + PIN de 4 dígitos + rol)
@@ -348,7 +348,10 @@ function saveProduct_(user, req) {
       const inicial = Math.round(Number(p.stock || 0));
       if (!(inicial >= 0)) fail_('Stock inicial inválido.');
       let max = 0;
-      list.forEach(function (x) { const n = Number(String(x.id).replace(/\D/g, '')); if (n > max) max = n; });
+      const seen = function (v) { const n = /^P(\d+)$/.test(String(v)) ? Number(String(v).slice(1)) : 0; if (n > max) max = n; };
+      list.forEach(function (x) { seen(x.id); });
+      const moves = sheet_(SH.MOVES).getDataRange().getValues();
+      for (let i = 1; i < moves.length; i++) seen(moves[i][2]);   // incluye productos ya quitados
       const id = 'P' + ('00' + (max + 1)).slice(-3);
       sh.appendRow([id, nombre, precio, inicial, minimo, true, new Date()]);
       addMove_(user.email, id, nombre, 'alta', inicial, inicial, 'Producto nuevo');
@@ -413,11 +416,17 @@ function sell_(user, req) {
   }
   if (metodo === FIADO && !client) fail_('Para fiar, elige el cliente que queda debiendo.');
   const entrega = req.entrega === EN_PROCESO ? EN_PROCESO : ENTREGADO;
+  // Llave única por cobro: si el celular reintenta (se cayó el internet), no se duplica la venta.
+  const key = /^[a-z0-9]{8,40}$/.test(String(req.key || '')) ? 'sale:' + req.key : '';
 
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   let result;
   try {
+    if (key) {
+      const prev = CacheService.getScriptCache().get(key);
+      if (prev) { const r0 = JSON.parse(prev); r0.products = readProducts_().map(publicProduct_); r0.repetida = true; return r0; }
+    }
     const products = readProducts_();
     const byId = {};
     products.forEach(function (p) { byId[p.id] = p; });
@@ -433,6 +442,9 @@ function sell_(user, req) {
       if (it.precio !== undefined && it.precio !== null && user.rol === 'admin') {
         price = Math.round(Number(it.precio));
         if (!(price >= 0)) fail_('Precio inválido para ' + p.nombre + '.');
+      } else if (it.esperado !== undefined && it.esperado !== null && Math.round(Number(it.esperado)) !== p.precio) {
+        // El celular tenía un precio viejo: no se cobra algo distinto a lo que vio el cliente.
+        fail_('El precio de ' + p.nombre + ' cambió a ' + money_(p.precio) + '. Revisa el total y cobra de nuevo.');
       }
       const key = p.id + '|' + price;
       if (!lines[key]) lines[key] = { p: p, qty: 0, price: price };
@@ -457,7 +469,7 @@ function sell_(user, req) {
       const l = lines[k];
       const t = l.qty * l.price;
       total += t; unidades += l.qty;
-      rows.push([ventaId, now, user.email, safeText_(user.nombre), l.p.id, l.p.nombre, l.qty, l.price, t, metodo, cliente, 'ok', clienteId, entrega, entrega === ENTREGADO ? now : '']);
+      rows.push([ventaId, now, user.email, safeText_(user.nombre), l.p.id, safeText_(l.p.nombre), l.qty, l.price, t, metodo, safeText_(cliente), 'ok', clienteId, entrega, entrega === ENTREGADO ? now : '']);
     });
     const sales = sheet_(SH.SALES);
     sales.getRange(sales.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
@@ -477,6 +489,10 @@ function sell_(user, req) {
       result.cliente = { id: client.id, nombre: client.nombre, celular: client.celular, saldo: balances_()[client.id] || 0 };
     }
     result.alerts = alerts.map(function (p) { return { nombre: p.nombre, stock: p.stock, stock_minimo: p.stock_minimo }; });
+    if (key) {
+      const save = Object.assign({}, result); delete save.products;
+      CacheService.getScriptCache().put(key, JSON.stringify(save), 21600);
+    }
     if (alerts.length) notifyLowStock_(alerts);
   } finally {
     lock.releaseLock();
@@ -708,7 +724,13 @@ function addPayment_(user, req) {
   const client = findClient_(String(req.cliente_id || ''));
   if (!client) fail_('Cliente no encontrado.');
   const nota = safeText_(String(req.nota || '').trim()).slice(0, 120);
-  sheet_(SH.PAYMENTS).appendRow([new Date(), client.id, client.nombre, valor, metodo, user.email, nota]);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    sheet_(SH.PAYMENTS).appendRow([new Date(), client.id, safeText_(client.nombre), valor, metodo, user.email, nota]);
+  } finally {
+    lock.releaseLock();
+  }
   const clients = clientsWithBalance_();
   const saldo = (clients.filter(function (c) { return c.id === client.id; })[0] || {}).saldo || 0;
   return { ok: true, saldo: saldo, clients: clients };
@@ -736,7 +758,12 @@ function clientDetail_(req) {
     list.push({ tipo: 'abono', fecha: Utilities.formatDate(asDate_(pays[j][0]), TZ, 'yyyy-MM-dd HH:mm'), metodo: String(pays[j][4]), valor: Number(pays[j][3]) || 0, detalle: [String(pays[j][6] || '')] });
   }
   const paid = paidSales_(id);
-  list.forEach(function (h) { if (h.tipo === 'compra' && h.metodo === FIADO) h.pagada = !!paid[h.venta_id]; });
+  list.forEach(function (h) {
+    if (h.tipo === 'compra' && h.metodo === FIADO && h.estado !== 'anulada') {
+      h.pendiente = paid[h.venta_id] || 0;
+      h.pagada = h.pendiente <= 0.5;
+    }
+  });
   list.sort(function (a, b) { return a.fecha < b.fecha ? 1 : -1; });
   balancesMemo_ = null;
   return { ok: true, cliente: { id: client.id, nombre: client.nombre, celular: client.celular, saldo: balances_()[id] || 0 }, historial: list.slice(0, 60) };
@@ -744,28 +771,31 @@ function clientDetail_(req) {
 
 /** Ventas fiadas que ya se marcaron como pagadas (abono con venta_id). */
 /**
- * Qué ventas fiadas de un cliente ya están cubiertas por sus abonos.
- * Los abonos se aplican a los fiados más antiguos primero, sin importar cómo se registraron
- * (abono suelto o botón "Marcar pagado"). Un fiado queda pagado cuando su valor se cubre completo.
+ * Cuánto le falta por pagar a cada venta fiada (vigente) de un cliente: { venta_id: pendiente }.
+ * 1) Lo pagado con "Marcar pagado" (nota "Pago venta V…") se aplica a ESA venta.
+ * 2) Los abonos sueltos (y cualquier sobrante) se aplican a los fiados más antiguos primero.
  */
 function paidSales_(cid) {
-  const out = {};
-  let disponible = 0;
-  const pays = sheet_(SH.PAYMENTS).getDataRange().getValues();
-  for (let j = 1; j < pays.length; j++) if (String(pays[j][1]) === cid) disponible += Number(pays[j][3]) || 0;
   const rows = sheet_(SH.SALES).getDataRange().getValues();
-  const fiados = {}, orden = [];
+  const pend = {}, orden = [];
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i];
     if (String(r[12]) !== cid || r[9] !== FIADO || r[11] === 'anulada') continue;
-    if (!(r[0] in fiados)) { fiados[r[0]] = 0; orden.push(String(r[0])); }
-    fiados[r[0]] += Number(r[8]) || 0;
+    const v = String(r[0]);
+    if (!(v in pend)) { pend[v] = 0; orden.push(v); }
+    pend[v] += Number(r[8]) || 0;
   }
-  orden.forEach(function (v) {
-    if (disponible >= fiados[v] - 0.5) { out[v] = true; disponible -= fiados[v]; }
-    else disponible = 0;
-  });
-  return out;
+  let bolsa = 0;
+  const pays = sheet_(SH.PAYMENTS).getDataRange().getValues();
+  for (let j = 1; j < pays.length; j++) {
+    if (String(pays[j][1]) !== cid) continue;
+    let valor = Number(pays[j][3]) || 0;
+    const m = /^Pago venta (V\d+)/.exec(String(pays[j][6] || ''));
+    if (m && pend[m[1]] > 0) { const usa = Math.min(valor, pend[m[1]]); pend[m[1]] -= usa; valor -= usa; }
+    bolsa += valor;
+  }
+  orden.forEach(function (v) { const usa = Math.min(bolsa, pend[v]); pend[v] -= usa; bolsa -= usa; });
+  return pend;
 }
 
 /** Marca una venta fiada como pagada: registra un abono por su valor (sin pasar del saldo). */
@@ -773,7 +803,7 @@ function payFiado_(user, req) {
   const ventaId = String(req.venta_id || '');
   if (!/^V\d+$/.test(ventaId)) fail_('Venta inválida.');
   const metodo = PAY_METHODS.indexOf(req.metodo) >= 0 && req.metodo !== FIADO ? req.metodo : 'Efectivo';
-  let cid = '';
+  let cid = '', valor = 0;
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
@@ -789,16 +819,19 @@ function payFiado_(user, req) {
     if (!found) fail_('Venta no encontrada.');
     const client = findClient_(cid);
     if (!client) fail_('Cliente no encontrado.');
-    if (paidSales_(cid)[ventaId]) fail_('Esa venta ya estaba pagada.');
+    const falta = paidSales_(cid)[ventaId] || 0;
+    if (falta <= 0.5) fail_('Esa venta ya estaba pagada.');
     balancesMemo_ = null;
     const saldo = balances_()[cid] || 0;
-    const valor = Math.max(0, Math.min(total, saldo));
-    sheet_(SH.PAYMENTS).appendRow([new Date(), cid, client.nombre, valor, metodo, user.email, 'Pago venta ' + ventaId]);
+    valor = Math.round(Math.min(falta, saldo));
+    if (valor <= 0) fail_('Ese cliente no tiene saldo pendiente.');
+    sheet_(SH.PAYMENTS).appendRow([new Date(), cid, safeText_(client.nombre), valor, metodo, user.email, 'Pago venta ' + ventaId]);
   } finally {
     lock.releaseLock();
   }
   const out = clientDetail_({ cliente_id: cid });
   out.clients = clientsWithBalance_();
+  out.valor = valor;
   return out;
 }
 
@@ -870,7 +903,12 @@ function sheet_(name) {
 }
 
 function addMove_(email, id, nombre, tipo, qty, stock, nota) {
-  sheet_(SH.MOVES).appendRow([new Date(), email, id, nombre, tipo, qty, stock, nota || '']);
+  sheet_(SH.MOVES).appendRow([new Date(), email, id, safeText_(nombre), tipo, qty, stock, safeText_(nota || '')]);
+}
+
+/** $35.000 */
+function money_(n) {
+  return '$' + String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
 function dayKey_(d) { return Utilities.formatDate(d, TZ, 'yyyy-MM-dd'); }

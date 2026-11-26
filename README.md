@@ -59,5 +59,7 @@ Abrir el enlace en Chrome → menú ⋮ → **Instalar app** / “Agregar a la p
 cd test && node backend.test.js   # API completa contra un emulador de Apps Script
 node e2e.js /tmp                  # recorrido en navegador móvil (requiere Playwright)
 node orders.js /tmp                # pedidos en proceso/entregado y marcar fiado pagado
+node fixes.test.js                # escenarios de la revisión: abonos parciales, precio viejo, ventas duplicadas, códigos
+node resilience.js /tmp           # navegador: sin internet, precio cambiado, corte al cobrar
 node persist.js                   # sesión permanente: reabrir, sin internet, cerrar sesión
 ```
