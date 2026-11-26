@@ -710,7 +710,7 @@ function clientDetail_(req) {
     if (String(pays[j][1]) !== id) continue;
     list.push({ tipo: 'abono', fecha: Utilities.formatDate(asDate_(pays[j][0]), TZ, 'yyyy-MM-dd HH:mm'), metodo: String(pays[j][4]), valor: Number(pays[j][3]) || 0, detalle: [String(pays[j][6] || '')] });
   }
-  const paid = paidSales_();
+  const paid = paidSales_(id);
   list.forEach(function (h) { if (h.tipo === 'compra' && h.metodo === FIADO) h.pagada = !!paid[h.venta_id]; });
   list.sort(function (a, b) { return a.fecha < b.fecha ? 1 : -1; });
   balancesMemo_ = null;
@@ -718,10 +718,28 @@ function clientDetail_(req) {
 }
 
 /** Ventas fiadas que ya se marcaron como pagadas (abono con venta_id). */
-function paidSales_() {
+/**
+ * Qué ventas fiadas de un cliente ya están cubiertas por sus abonos.
+ * Los abonos se aplican a los fiados más antiguos primero, sin importar cómo se registraron
+ * (abono suelto o botón "Marcar pagado"). Un fiado queda pagado cuando su valor se cubre completo.
+ */
+function paidSales_(cid) {
   const out = {};
+  let disponible = 0;
   const pays = sheet_(SH.PAYMENTS).getDataRange().getValues();
-  for (let j = 1; j < pays.length; j++) { const m = /^Pago venta (V\d+)/.exec(String(pays[j][6] || '')); if (m) out[m[1]] = true; }
+  for (let j = 1; j < pays.length; j++) if (String(pays[j][1]) === cid) disponible += Number(pays[j][3]) || 0;
+  const rows = sheet_(SH.SALES).getDataRange().getValues();
+  const fiados = {}, orden = [];
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (String(r[12]) !== cid || r[9] !== FIADO || r[11] === 'anulada') continue;
+    if (!(r[0] in fiados)) { fiados[r[0]] = 0; orden.push(String(r[0])); }
+    fiados[r[0]] += Number(r[8]) || 0;
+  }
+  orden.forEach(function (v) {
+    if (disponible >= fiados[v] - 0.5) { out[v] = true; disponible -= fiados[v]; }
+    else disponible = 0;
+  });
   return out;
 }
 
@@ -734,7 +752,6 @@ function payFiado_(user, req) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    if (paidSales_()[ventaId]) fail_('Esa venta ya estaba pagada.');
     const rows = sheet_(SH.SALES).getDataRange().getValues();
     let total = 0, found = false;
     for (let i = 1; i < rows.length; i++) {
@@ -747,6 +764,7 @@ function payFiado_(user, req) {
     if (!found) fail_('Venta no encontrada.');
     const client = findClient_(cid);
     if (!client) fail_('Cliente no encontrado.');
+    if (paidSales_(cid)[ventaId]) fail_('Esa venta ya estaba pagada.');
     balancesMemo_ = null;
     const saldo = balances_()[cid] || 0;
     const valor = Math.max(0, Math.min(total, saldo));

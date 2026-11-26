@@ -139,6 +139,17 @@ const f3 = r.venta_id; assert.strictEqual(r.cliente.saldo, 70000);
 r = G.call({ action: 'payFiado', token: TC, venta_id: f3, metodo: 'Efectivo' });
 assert.strictEqual(r.cliente.saldo, 0); assert.ok(r.clients);
 assert.match(G.call({ action: 'payFiado', token: TC, venta_id: pedido }).msg, /no es fiada/);
+// Abono suelto que cubre un fiado -> se ve pagado sin usar el botón
+const cJ = G.call({ action: 'saveClient', token: TC, client: { nombre: 'Jasmin', celular: '3105129970' } }).id;
+const fj1 = G.call({ action: 'sell', token: TC, items: [{ id: 'P001', qty: 1 }], metodo: 'Fiado', cliente_id: cJ }).venta_id;
+const fj2 = G.call({ action: 'sell', token: TC, items: [{ id: 'P001', qty: 1 }], metodo: 'Fiado', cliente_id: cJ }).venta_id;
+G.call({ action: 'addPayment', token: TC, cliente_id: cJ, valor: 35000, metodo: 'Llave' });
+r = G.call({ action: 'clientDetail', token: TC, cliente_id: cJ });
+assert.strictEqual(r.historial.find(h => h.venta_id === fj1).pagada, true, 'el más antiguo queda pagado');
+assert.strictEqual(r.historial.find(h => h.venta_id === fj2).pagada, false);
+assert.match(G.call({ action: 'payFiado', token: TC, venta_id: fj1 }).msg, /ya estaba pagada/);
+r = G.call({ action: 'payFiado', token: TC, venta_id: fj2, metodo: 'Nequi' });
+assert.strictEqual(r.cliente.saldo, 0); assert.ok(r.historial.find(h => h.venta_id === fj2).pagada);
 // Hoja vieja sin pestañas nuevas: se crean solas
 assert.ok(G.sheets.clientes && G.sheets.abonos);
 assert.strictEqual(G.sheets.ventas.data[0][12], 'cliente_id');

@@ -635,7 +635,17 @@
   });
 
   async function loadOrders(quiet) {
-    try { S.orders = await api('orders', null, { quiet: !!quiet || !!S.orders }); renderOrders(); } catch (e) { if (!quiet) showErr(e); }
+    try {
+      S.orders = await api('orders', null, { quiet: !!quiet || !!S.orders }); renderOrders();
+    } catch (e) {
+      if (e.handled) return;
+      const old = /desconocida/i.test(e.message);
+      $('#ordersBody').innerHTML = '<div class="card center"><p>😕 ' + (old
+        ? 'Los pedidos aún no están activos: falta publicar la versión nueva del script en Google (Implementar → Nueva versión).'
+        : esc(e.message)) + '</p><button id="ordersRetry" class="secondary">⟳ Reintentar</button></div>';
+      $('#ordersRetry').addEventListener('click', () => { $('#ordersBody').innerHTML = '<p class="muted center">Cargando…</p>'; loadOrders(); });
+      if (!quiet && !old) showErr(e);
+    }
   }
   function orderCard(o, pending) {
     const items = o.items.map((i) => i.cantidad + ' × ' + i.producto).join(', ');
