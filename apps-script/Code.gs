@@ -114,6 +114,7 @@ function doPost(e) {
       case 'sell': return json_(sell_(user, req));
       case 'void': return json_(voidSale_(user, req));
       case 'saveProduct': return json_(saveProduct_(user, req));
+      case 'deleteProduct': return json_(deleteProduct_(user, req));
       case 'adjustStock': return json_(adjustStock_(user, req));
       case 'report': return json_(report_(user));
       case 'changePin': return json_(changePin_(user, req));
@@ -358,6 +359,25 @@ function saveProduct_(user, req) {
   return { ok: true, products: readProducts_().map(publicProduct_) };
 }
 
+/**
+ * Quita un producto del catálogo (borra su fila en "productos").
+ * Las ventas pasadas no cambian: guardan el nombre del producto, así que los informes siguen completos.
+ */
+function deleteProduct_(user, req) {
+  requireAdmin_(user);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const cur = readProducts_().filter(function (x) { return x.id === String(req.id); })[0];
+    if (!cur) fail_('Producto no encontrado.');
+    sheet_(SH.PRODUCTS).deleteRow(cur.row);
+    addMove_(user.email, cur.id, cur.nombre, 'eliminado', -cur.stock, 0, 'Producto quitado del catálogo');
+  } finally {
+    lock.releaseLock();
+  }
+  return { ok: true, products: readProducts_().map(publicProduct_) };
+}
+
 function adjustStock_(user, req) {
   requireAdmin_(user);
   const qty = Math.round(Number(req.cantidad));
@@ -425,7 +445,12 @@ function sell_(user, req) {
     });
 
     const now = new Date();
-    const ventaId = 'V' + Utilities.formatDate(now, TZ, 'yyMMddHHmmss') + Math.floor(Math.random() * 90 + 10);
+    // Número de venta único aunque dos personas vendan en el mismo segundo.
+    const sales0 = sheet_(SH.SALES).getDataRange().getValues();
+    const usados = {};
+    for (let i = Math.max(1, sales0.length - 500); i < sales0.length; i++) usados[sales0[i][0]] = true;
+    let ventaId;
+    do { ventaId = 'V' + Utilities.formatDate(now, TZ, 'yyMMddHHmmss') + ('000' + Math.floor(Math.random() * 10000)).slice(-4); } while (usados[ventaId]);
     const rows = [];
     let total = 0, unidades = 0;
     Object.keys(lines).forEach(function (k) {

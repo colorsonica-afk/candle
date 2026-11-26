@@ -150,6 +150,18 @@ assert.strictEqual(r.historial.find(h => h.venta_id === fj2).pagada, false);
 assert.match(G.call({ action: 'payFiado', token: TC, venta_id: fj1 }).msg, /ya estaba pagada/);
 r = G.call({ action: 'payFiado', token: TC, venta_id: fj2, metodo: 'Nequi' });
 assert.strictEqual(r.cliente.saldo, 0); assert.ok(r.historial.find(h => h.venta_id === fj2).pagada);
+// Quitar producto: las ventas pasadas siguen en el informe
+const antes = G.call({ action: 'report', token: TC }).resumen.total.total;
+r = G.call({ action: 'saveProduct', token: TC, product: { nombre: 'Vela temporal', precio: 1000, stock: 3, stock_minimo: 0 } });
+const tmp = r.products.find(x => x.nombre === 'Vela temporal').id;
+G.call({ action: 'sell', token: TC, items: [{ id: tmp, qty: 1 }], metodo: 'Efectivo' });
+r = G.call({ action: 'deleteProduct', token: TC, id: tmp });
+assert.ok(r.ok, r.msg); assert.ok(!r.products.some(x => x.id === tmp));
+assert.ok(r.products.some(x => x.id === 'P001'), 'los demás siguen');
+r = G.call({ action: 'report', token: TC });
+assert.strictEqual(r.resumen.total.total, antes + 1000); assert.ok(r.porProducto.total['Vela temporal']);
+assert.match(G.call({ action: 'deleteProduct', token: TC, id: tmp }).msg, /no encontrado/);
+assert.strictEqual(G.call({ action: 'deleteProduct', token: tJ, id: 'P001' }).ok, false, 'vendedor no puede quitar');
 // Hoja vieja sin pestañas nuevas: se crean solas
 assert.ok(G.sheets.clientes && G.sheets.abonos);
 assert.strictEqual(G.sheets.ventas.data[0][12], 'cliente_id');

@@ -14,6 +14,7 @@ function makeSheet(name) {
       setNumberFormat() {}
     }),
     appendRow: (row) => data.push(row.slice()),
+    deleteRow: (r) => data.splice(r - 1, 1),
     setFrozenRows() {}
   };
   return sh;

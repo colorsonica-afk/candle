@@ -21,6 +21,7 @@ Punto de venta para celular (PWA instalable desde Chrome) para vender velas de N
 - **WhatsApp:** después de cada venta o abono, botón para enviar la cuenta/recibo al WhatsApp del cliente (`wa.me`, número de Colombia +57). En clientes que deben, botón “Cobrar por WhatsApp”.
 - **Estados de pedido:** al vender se elige ✅ Entregado ya / ⏳ En proceso. La pestaña 📦 Pedidos lista los pendientes (con contador), permite marcarlos entregados y avisar al cliente por WhatsApp. Ventas anteriores sin estado cuentan como entregadas.
 - **Marcar fiado pagado:** en el historial del cliente, cada compra fiada tiene “✅ Marcar pagado”; registra un abono por su valor (sin pasar del saldo) con el medio de pago elegido.
+- **Quitar productos:** Productos → Editar → “🗑️ Quitar producto” borra la fila del catálogo; las ventas pasadas conservan el nombre y siguen en los informes.
 - **Archivo maestro:** los admin ven en Cuenta el enlace a la hoja de Google (solo abre para quien tenga permiso en Drive).
 - Las pestañas `clientes` y `abonos` y la columna `cliente_id` de `ventas` se crean solas la primera vez que se usan.
 

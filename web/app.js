@@ -734,7 +734,8 @@
       '<label class="field"><span>Precio de venta</span><input id="fPrice" type="number" inputmode="numeric" min="0" value="' + (p ? p.precio : '') + '"></label>' +
       (isNew ? '<label class="field"><span>Unidades iniciales</span><input id="fStock" type="number" inputmode="numeric" min="0" value="0"></label>' : '') +
       '<label class="field"><span>Avisar cuando queden (stock mínimo)</span><input id="fMin" type="number" inputmode="numeric" min="0" value="' + (p ? p.stock_minimo : 10) + '"></label>' +
-      (isNew ? '' : '<label class="field" style="display:flex;gap:10px;align-items:center"><input id="fActive" type="checkbox" style="width:auto"' + (p.activo ? ' checked' : '') + '><span style="margin:0">Activo (visible para vender)</span></label>'),
+      (isNew ? '' : '<label class="field" style="display:flex;gap:10px;align-items:center"><input id="fActive" type="checkbox" style="width:auto"' + (p.activo ? ' checked' : '') + '><span style="margin:0">Activo (visible para vender)</span></label>' +
+        '<button id="fDelete" class="danger">🗑️ Quitar producto</button>'),
       'Guardar', async () => {
         const prod = {
           id: p ? p.id : undefined,
@@ -750,6 +751,23 @@
           const r = await api('saveProduct', { product: prod });
           setProducts(r.products); S.report = null;
           toast('🎁 Producto guardado ✓');
+        } catch (e) { showErr(e); }
+      });
+    if (!isNew) $('#fDelete').addEventListener('click', () => deleteProduct(p));
+  }
+
+  function deleteProduct(p) {
+    openSheet('🗑️ ¿Quitar ' + p.nombre + '?',
+      '<p>Se quita de la lista de productos y ya no se podrá vender.</p>' +
+      (p.stock > 0 ? '<p>⚠️ Todavía tiene <b>' + num.format(p.stock) + ' unidades</b> en inventario.</p>' : '') +
+      '<p class="muted small">Las ventas que ya se hicieron no cambian y siguen en los informes. ' +
+      'Si solo quieres ocultarlo por un tiempo, mejor desmarca “Activo”.</p>',
+      '🗑️ Sí, quitar', async () => {
+        try {
+          const r = await api('deleteProduct', { id: p.id });
+          Object.keys(S.cart).forEach((id) => { if (id === p.id) delete S.cart[id]; });
+          setProducts(r.products); S.report = null;
+          toast('🗑️ Producto quitado');
         } catch (e) { showErr(e); }
       });
   }
