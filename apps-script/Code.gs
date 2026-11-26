@@ -827,7 +827,7 @@ function orders_() {
   return {
     ok: true,
     enProceso: all.filter(function (o) { return o.entrega === EN_PROCESO; }),
-    entregados: all.filter(function (o) { return o.entrega === ENTREGADO && o.entregado_fecha; }).slice(0, 15)
+    entregados: all.filter(function (o) { return o.entrega === ENTREGADO; }).slice(0, 25)
   };
 }
 

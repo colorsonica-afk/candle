@@ -585,6 +585,11 @@
       ' · ' + esc(h.fecha.slice(5)) + (h.estado === 'anulada' ? ' · anulada' : '') + '<small>' + esc(h.detalle.filter(Boolean).join(', ') || (h.metodo || '')) + '</small>' +
       (h.metodo === 'Fiado' && h.tipo === 'compra' && h.estado !== 'anulada'
         ? (h.pagada ? '<em class="paid">✅ Pagada</em>' : '<button class="mark-paid" data-paid="' + esc(h.venta_id) + '">✅ Marcar pagado</button>') : '') +
+      (h.tipo === 'compra' && h.estado !== 'anulada'
+        ? (h.entrega === 'en proceso'
+          ? '<em class="deliv pending">⏳ En proceso</em><button class="mark-paid" data-deliv="' + esc(h.venta_id) + '" data-to="entregado">✅ Marcar entregado</button>'
+          : '<em class="deliv">📦 Entregado</em><button class="mark-ghost" data-deliv="' + esc(h.venta_id) + '" data-to="en proceso">⏳ Pasar a en proceso</button>')
+        : '') +
       '</span><b>' + (h.tipo === 'abono' ? '−' : '') + fmt(h.valor) + '</b></div>').join('') : '<p class="muted">Sin movimientos todavía.</p>';
     openSheet('🙋 ' + c.nombre,
       '<p class="big-total ' + (c.saldo > 0 ? 'debe' : '') + '">' + saldoText(c.saldo) + '</p>' +
@@ -598,6 +603,14 @@
     if ($('#cPay')) $('#cPay').addEventListener('click', () => payForm(c));
     $('#cSell').addEventListener('click', () => { S.clientId = c.id; renderClientPick(); closeSheet(); go('sell'); });
     $('#cEdit').addEventListener('click', () => clientForm(c, '', false));
+    $$('#sheetBody [data-deliv]').forEach((b) => b.addEventListener('click', async () => {
+      try {
+        S.orders = await api('setDelivery', { venta_id: b.dataset.deliv, estado: b.dataset.to });
+        renderOrders(); S.report = null;
+        toast(b.dataset.to === 'en proceso' ? '⏳ Pasó a en proceso: ya está en 📦 Pedidos' : '🎁 ¡Pedido entregado!');
+        openClient(c.id);
+      } catch (e) { showErr(e); }
+    }));
     $$('#sheetBody [data-paid]').forEach((b) => b.addEventListener('click', () => {
       markPaid(c, r.historial.find((x) => x.venta_id === b.dataset.paid));
     }));
@@ -658,7 +671,7 @@
       '<div class="order-items">' + esc(items) + '</div>' +
       (pending
         ? '<div class="row"><button class="primary" data-deliver="' + esc(o.venta_id) + '">✅ Marcar entregado</button></div>' + waButton(o.celular, listo, '📲 Avisar que está listo')
-        : '<button class="ghost small-btn" data-undo="' + esc(o.venta_id) + '">↩️ Volver a en proceso</button>') +
+        : '<button class="ghost small-btn" data-undo="' + esc(o.venta_id) + '">⏳ Pasar a en proceso</button>') +
       '</div>';
   }
   function renderOrders() {
@@ -668,7 +681,8 @@
     $('#ordersBody').innerHTML =
       '<h2>⏳ En proceso (' + n + ')</h2>' +
       (n ? O.enProceso.map((o) => orderCard(o, true)).join('') : '<p class="muted card">🎉 No hay pedidos pendientes por entregar.</p>') +
-      '<h2 style="margin-top:18px">✅ Entregados recientes</h2>' +
+      '<h2 style="margin-top:18px">✅ Entregados / ventas recientes</h2>' +
+      '<p class="muted small">¿Falta un pedido arriba? Búscalo aquí y toca “⏳ Pasar a en proceso”.</p>' +
       (O.entregados.length ? O.entregados.map((o) => orderCard(o, false)).join('') : '<p class="muted">Aún no hay entregas registradas.</p>');
   }
   $('#ordersBody').addEventListener('click', async (ev) => {

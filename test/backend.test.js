@@ -162,6 +162,14 @@ r = G.call({ action: 'report', token: TC });
 assert.strictEqual(r.resumen.total.total, antes + 1000); assert.ok(r.porProducto.total['Vela temporal']);
 assert.match(G.call({ action: 'deleteProduct', token: TC, id: tmp }).msg, /no encontrado/);
 assert.strictEqual(G.call({ action: 'deleteProduct', token: tJ, id: 'P001' }).ok, false, 'vendedor no puede quitar');
+// Venta vieja sin estado aparece en entregados y se puede pasar a en proceso
+const vieja = G.call({ action: 'sell', token: TC, items: [{ id: 'P001', qty: 1 }], metodo: 'Efectivo', cliente_id: CID }).venta_id;
+G.sheets.ventas.data.forEach(row => { if (row[0] === vieja) { row[13] = ''; row[14] = ''; } });
+r = G.call({ action: 'orders', token: TC });
+assert.ok(r.entregados.some(o => o.venta_id === vieja), 'venta vieja visible');
+r = G.call({ action: 'setDelivery', token: TC, venta_id: vieja, estado: 'en proceso' });
+assert.ok(r.enProceso.some(o => o.venta_id === vieja));
+assert.strictEqual(G.call({ action: 'clientDetail', token: TC, cliente_id: CID }).historial.find(h => h.venta_id === vieja).entrega, 'en proceso');
 // Hoja vieja sin pestañas nuevas: se crean solas
 assert.ok(G.sheets.clientes && G.sheets.abonos);
 assert.strictEqual(G.sheets.ventas.data[0][12], 'cliente_id');

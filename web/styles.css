@@ -336,3 +336,9 @@ h1, h2, .topbar strong { font-family: Georgia, "Times New Roman", serif; letter-
 }
 .paid { display: block; margin-top: 4px; font-style: normal; font-size: .82rem; font-weight: 700; color: #2e7d4f; }
 #ordersBody h2 { margin: 4px 0 10px; }
+.deliv { display: block; margin-top: 4px; font-style: normal; font-size: .82rem; font-weight: 700; color: var(--muted); }
+.deliv.pending { color: #b7791f; }
+.mark-ghost {
+  display: inline-block; margin-top: 6px; padding: 6px 10px; border-radius: 8px; font-size: .82rem; font-weight: 700;
+  border: 1px solid var(--line); background: var(--surface);
+}
